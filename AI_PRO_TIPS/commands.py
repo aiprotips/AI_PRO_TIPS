@@ -5,7 +5,7 @@ from repo import kv_get, kv_set, mark_betslip_cancelled_by_code, emit_count  # <
 from autopilot import Autopilot
 from util import now_tz  # <-- per /preview e /check_today
 import time
-import json  # <-- per leggere pool dal KV
+import json  # <-- per leggere pool da KV
 
 HELP_TEXT = (
     "🤖 <b>AI Pro Tips — Comandi</b>\n"
