@@ -60,7 +60,7 @@ class Autopilot:
         arr.append({"home": home, "away": away, "pick": pick, "fixture_id": int(fixture_id)})
         kv_set(key, json.dumps(arr, ensure_ascii=False))
 
-    # ---- FINESTRA DI INVIO GIocate: 3h prima del primo kickoff del giorno  <-- AGGIUNTA
+    # ---- FINESTRA DI INVIO Giocate: 3h prima del primo kickoff del giorno  <-- AGGIUNTA
     def _first_kickoff_dt(self):
         """Ritorna il datetime (tz locale) del primo kickoff tra i fixture whitelisted di oggi, oppure None."""
         today = self._today_str()
@@ -74,7 +74,7 @@ class Autopilot:
         for fx in fixtures:
             iso = (fx.get("fixture",{}) or {}).get("date")
             dt = parse_dt(iso)
-            if not dt: 
+            if not dt:
                 continue
             # normalizza a tz locale
             try:
@@ -106,6 +106,42 @@ class Autopilot:
         if threshold < quiet_end:
             threshold = quiet_end
         return now >= threshold
+
+    # ---- Preview/Skip support (per comandi privati)  <-- AGGIUNTA
+    def preview_window(self):
+        """Restituisce info su primo kickoff e orario da cui partire con le giocate."""
+        fk = self._first_kickoff_dt()
+        if not fk:
+            return {"has_fixtures": False}
+        thr = fk - timedelta(hours=3)
+        qend = self._quiet_end_today()
+        if thr < qend:
+            thr = qend
+        return {"has_fixtures": True, "first_kickoff": fk, "send_from": thr}
+
+    def _skip_key(self):
+        return "skip_next_" + now_tz(self.cfg.TZ).strftime("%Y%m%d")
+
+    def set_skip_next(self, kind: str):
+        """kind: 'value' | 'combo'"""
+        try:
+            data = json.loads(kv_get(self._skip_key()) or "{}")
+        except Exception:
+            data = {}
+        if kind in ("value","combo"):
+            data[kind] = True
+        kv_set(self._skip_key(), json.dumps(data, ensure_ascii=False))
+
+    def _should_skip(self, kind: str) -> bool:
+        try:
+            data = json.loads(kv_get(self._skip_key()) or "{}")
+        except Exception:
+            data = {}
+        flag = bool(data.get(kind))
+        if flag:
+            data[kind] = False  # consumiamo lo skip one-shot
+            kv_set(self._skip_key(), json.dumps(data, ensure_ascii=False))
+        return flag
 
     # ---- Emitters ----
     def post_banter(self):
@@ -214,20 +250,22 @@ class Autopilot:
 
         # 1) Value singles (2/die), distribuite mattina/pomeriggio
         if can_emit_bets and emit_count("value_single", today) < plan["value_singles"] and slot in ("morning","afternoon","evening"):
-            if self.post_value_single():
-                emit_mark("value_single", now); return
+            if not self._should_skip("value"):  # <-- AGGIUNTA (skip one-shot)
+                if self.post_value_single():
+                    emit_mark("value_single", now); return
 
         # 2) Multiple: doppia, tripla, quintupla, lunga (8–12)
         produced = emit_count("combo", today)
         combos = plan["combos"]
         if can_emit_bets and produced < len(combos) and slot in ("afternoon","evening"):
-            c = combos[produced]
-            legs = random.randint(8,12) if c["legs"] == "8-12" else c["legs"]
-            label = {
-                2:"🧩 Doppia Safe", 3:"🚀 Tripla Safe", 4:"🚀 Quadrupla Safe", 5:"🚀 Quintupla Safe"
-            }.get(legs, f"🚀 Multipla x{legs} Safe")
-            if self.post_combo_range(legs, c["leg_lo"], c["leg_hi"], label):
-                emit_mark("combo", now); return
+            if not self._should_skip("combo"):  # <-- AGGIUNTA (skip one-shot)
+                c = combos[produced]
+                legs = random.randint(8,12) if c["legs"] == "8-12" else c["legs"]
+                label = {
+                    2:"🧩 Doppia Safe", 3:"🚀 Tripla Safe", 4:"🚀 Quintupla Safe", 5:"🚀 Quintupla Safe"
+                }.get(legs, f"🚀 Multipla x{legs} Safe")
+                if self.post_combo_range(legs, c["leg_lo"], c["leg_hi"], label):
+                    emit_mark("combo", now); return
 
         # 3) Random content (può uscire anche prima del gate giocate)
         rc = plan["random_content"]
