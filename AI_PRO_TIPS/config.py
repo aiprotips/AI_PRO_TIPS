@@ -29,7 +29,7 @@ class Config:
     }
 
     # Quiet hours & scheduling
-    QUIET_HOURS = (0, 9)  # 00:00–08:59
+    QUIET_HOURS = (0, 8)  # 00:00–08:59
     MIN_GAP_MINUTES = int(os.getenv("MIN_GAP_MINUTES", "18"))
     SLOTS = {
         "morning":  ("09:15", "11:45"),
