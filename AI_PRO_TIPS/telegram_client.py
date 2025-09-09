@@ -25,3 +25,15 @@ class TelegramClient:
     def notify_admin(self, text: str):
         if self.admin_id:
             self.send_message(text, chat_id=self.admin_id)
+    def get_updates(self, offset: int = None, timeout: int = 20):
+        params = {"timeout": timeout}
+        if offset is not None:
+            params["offset"] = offset
+        try:
+            r = requests.get(f"{self.base}/getUpdates", params=params, timeout=timeout+5)
+            if r.ok:
+                return r.json().get("result", [])
+            print("[TG] getUpdates failed:", r.status_code, r.text)
+        except Exception as e:
+            print("[TG] getUpdates error:", e)
+        return []
