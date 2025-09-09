@@ -1,19 +1,17 @@
-import os, time, threading, pathlib
+import time, threading, pathlib
 from config import Config
 from telegram_client import TelegramClient
 from api_football import APIFootball
 from autopilot import Autopilot
 from live_engine import LiveEngine
-from db import get_session
 from sqlalchemy import text
 from sql_exec import run_sql_file
-from commands import CommandsLoop   # <--- aggiunto
+from commands import CommandsLoop
 
 def ensure_db_and_schema():
     from db import engine
     with engine.begin() as conn:
         conn.execute(text("SELECT 1"))
-    # auto-apply migrations
     sql_path = pathlib.Path(__file__).parent / "migrazioni" / "001_init.sql"
     if sql_path.exists():
         try:
@@ -30,8 +28,8 @@ def main():
     ensure_db_and_schema()
 
     auto = Autopilot(cfg, tg, api)
-    live = LiveEngine(tg, api)
-    cmds = CommandsLoop(cfg, tg, auto)   # <--- aggiunto
+    live = LiveEngine(tg, api, cfg)
+    cmds = CommandsLoop(cfg, tg, auto)
 
     def loop_autopilot():
         while True:
@@ -52,18 +50,16 @@ def main():
                 log_error("live", str(e))
             time.sleep(cfg.LIVE_POLL_SECONDS)
 
-    def loop_commands():   # <--- nuovo loop
-        while True:
-            try:
-                cmds.run_forever()
-            except Exception as e:
-                from repo import log_error
-                log_error("commands", str(e))
-            time.sleep(5)
+    def loop_commands():
+        try:
+            cmds.run_forever()
+        except Exception as e:
+            from repo import log_error
+            log_error("commands", str(e))
 
     th1 = threading.Thread(target=loop_autopilot, daemon=True)
     th2 = threading.Thread(target=loop_live, daemon=True)
-    th3 = threading.Thread(target=loop_commands, daemon=True)  # <--- thread comandi
+    th3 = threading.Thread(target=loop_commands, daemon=True)
     th1.start(); th2.start(); th3.start()
 
     print("AI Pro Tips running. Ctrl+C per uscire.")
