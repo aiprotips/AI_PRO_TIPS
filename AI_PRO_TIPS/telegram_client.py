@@ -38,3 +38,4 @@ class TelegramClient:
         except Exception as e:
             print("[TG] getUpdates error:", e)
         return []
+#l
