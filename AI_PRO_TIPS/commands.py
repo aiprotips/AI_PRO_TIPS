@@ -1,9 +1,9 @@
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from config import Config
 from telegram_client import TelegramClient
 from repo import kv_get, kv_set
 from autopilot import Autopilot
-from datetime import datetime
+import time
 
 HELP_TEXT = (
     "🤖 <b>AI Pro Tips — Comandi</b>\n"
@@ -13,7 +13,7 @@ HELP_TEXT = (
     "/id — mostra il tuo chat id\n"
     "\n<b>Admin</b>:\n"
     "/banter, /stat, /value, /story\n"
-    "/parlay N  (N=1,2,3,4,6)\n"
+    "/parlay N  (N=1,2,3,4,6,8,10,12)\n"
     "/status — stato rapido"
 )
 
@@ -52,60 +52,51 @@ class CommandsLoop:
         if not text or not chat_id:
             return
 
-        # Comandi base
-        if text.lower().startswith("/start"):
-            self._reply(chat_id, "Benvenuto! Questo è il bot AI Pro Tips. Per il pubblico è un canale one-way; qui puoi testare i comandi.")
-            return
-        if text.lower().startswith("/help"):
-            self._reply(chat_id, HELP_TEXT)
-            return
-        if text.lower().startswith("/ping"):
-            self._reply(chat_id, "pong ✅")
-            return
-        if text.lower().startswith("/id"):
-            self._reply(chat_id, f"Tuo chat id: <code>{chat_id}</code>")
-            return
-
-        # Da qui in giù: admin only
-        if not self._is_admin(user_id):
-            self._reply(chat_id, "Comando non disponibile per l’utente.")
-            return
-
         low = text.lower()
+
+        # Comandi base
+        if low.startswith("/start"):
+            self._reply(chat_id, "Benvenuto! Questo è il bot AI Pro Tips. In canale è one-way; qui puoi testare i comandi.")
+            return
+        if low.startswith("/help"):
+            self._reply(chat_id, HELP_TEXT); return
+        if low.startswith("/ping"):
+            self._reply(chat_id, "pong ✅"); return
+        if low.startswith("/id"):
+            self._reply(chat_id, f"Tuo chat id: <code>{chat_id}</code>"); return
+
+        # Admin only
+        if not self._is_admin(user_id):
+            self._reply(chat_id, "❌ Non autorizzato.")
+            return
+
         if low.startswith("/banter"):
-            self.auto.post_banter()
-            self._reply(chat_id, "OK: banter inviato.")
-            return
+            self.auto.post_banter(); self._reply(chat_id, "OK: banter inviato."); return
         if low.startswith("/stat"):
-            self.auto.post_stat_flash()
-            self._reply(chat_id, "OK: statistica lampo inviata.")
-            return
+            self.auto.post_stat_flash(); self._reply(chat_id, "OK: statistica lampo inviata."); return
         if low.startswith("/value"):
-            self.auto.post_value_scan()
-            self._reply(chat_id, "OK: value scanner lanciato.")
-            return
+            ok = self.auto.post_value_single()
+            self._reply(chat_id, f"Value single {'OK' if ok else 'fallita (nessuna in range)'}"); return
         if low.startswith("/story"):
-            self.auto.post_story()
-            self._reply(chat_id, "OK: story inviata.")
-            return
+            self.auto.post_story(); self._reply(chat_id, "OK: story inviata."); return
         if low.startswith("/parlay"):
-            # /parlay 3
             parts = text.split()
             legs = 3
             if len(parts) >= 2:
-                try:
-                    legs = int(parts[1])
-                except:
-                    pass
-            legs = legs if legs in (1,2,3,4,6) else 3
-            ok = self.auto.post_parlay(legs)
-            self._reply(chat_id, f"Parlay x{legs} {'OK' if ok else 'fallita (nessuna combo trovata)'}")
-            return
+                try: legs = int(parts[1])
+                except: pass
+            if legs not in (1,2,3,4,5,6,8,9,10,11,12):
+                legs = 3
+            # range default per admin quick
+            lo, hi = (1.20, 1.50)
+            if legs == 2: lo, hi = (1.30, 1.50)
+            if legs >= 8: lo, hi = (1.10, 1.36)
+            label = {2:"🧩 Doppia Safe",3:"🚀 Tripla Safe",4:"🚀 Quadrupla Safe",5:"🚀 Quintupla Safe"}.get(legs, f"🚀 Multipla x{legs} Safe")
+            ok = self.auto.post_combo_range(legs, lo, hi, label)
+            self._reply(chat_id, f"Parlay x{legs} {'OK' if ok else 'fallita (nessuna combo trovata)'}"); return
         if low.startswith("/status"):
-            self._reply(chat_id, "Bot attivo. Loop autopilot/live in esecuzione. ✅")
-            return
+            self._reply(chat_id, "Bot attivo. Loop autopilot/live/commands in esecuzione. ✅"); return
 
-        # fallback
         self._reply(chat_id, "Comando non riconosciuto. Usa /help")
 
     def run_forever(self):
@@ -120,8 +111,4 @@ class CommandsLoop:
                         self._set_offset(offset)
                     self.handle_update(upd)
             except Exception as e:
-                # loggalo se vuoi
-                # from repo import log_error
-                # log_error("commands", str(e))
-                import time
-                time.sleep(2)   # <-- evita loop serrato
+                time.sleep(2)  # evita loop serrato
