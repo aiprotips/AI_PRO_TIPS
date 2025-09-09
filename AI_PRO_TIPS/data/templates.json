@@ -1,0 +1,98 @@
+{
+  "cta_link": "👉 {link}",
+  "emojis_gasanti": ["🔥","🚀","⚡","💎","🏆","🎯","💥","🎉","💪","🧨"],
+  "value_single": {
+    "title": "🔎 <b>VALUE SCANNER</b>",
+    "outro_pool": [
+      "Andiamo a prendercela.",
+      "La dritta del giorno.",
+      "Troppa value per lasciarla lì.",
+      "Biglietto d’ingresso per la cassa.",
+      "Colpo secco, deciso."
+    ]
+  },
+  "multipla": {
+    "title_map": {
+      "2": "🧩 <b>DOPPIA</b> 🧩",
+      "3": "🎻 <b>TRIPLA</b> 🎻",
+      "5": "🎬 <b>QUINTUPLA</b> 🎬",
+      "long": "💎 <b>SUPER COMBO</b> 💎"
+    },
+    "leg_line": "• {home} 🆚 {away}\n   🎯 {pick} — <b>{odds:.2f}</b>",
+    "footer": "💰 Quota totale: <b>{total_odds:.2f}</b>\n🕒 Calcio d’inizio: {kickoff}",
+    "outro_pool": [
+      "Una a una fino alla cassa.",
+      "Solide, senza rischi inutili.",
+      "Effetto domino.",
+      "Rumore controllato, risultato pesante."
+    ]
+  },
+  "live_alert": {
+    "title": "⚡ <b>LIVE ALERT</b> ⚡",
+    "body": "⏱️ {minute}’ — la favorita <b>{fav}</b> è sotto contro {other} (pre @ {preodd}).\nQuota live: {odds_str}",
+    "outro_pool": [
+      "Situazione perfetta per rientrare.",
+      "Pressione alta: l’inerzia può girare.",
+      "Finestra breve: si entra o si lascia.",
+      "Match vivo, radar acceso."
+    ]
+  },
+  "live_energy": {
+    "format": "⏱️ {minute}’ — {home}–{away}: {line}  (#{sid})"
+  },
+  "celebrations": {
+    "title_pool": ["CASSA!","IN CASSA!","VOLANO I TICKET!","COLPO CHIUSO!"],
+    "singola": "{home} 🆚 {away}\nRisultato: <b>{score}</b>\nPick: {pick} ✅ @ <b>{odds:.2f}</b>",
+    "multipla_leg_line": "• {home} 🆚 {away}\nRisultato: {score}\nPick: {pick} ✅",
+    "multipla_footer": "Quota totale: <b>{total_odds:.2f}</b>"
+  },
+  "almost_win": {
+    "title_pool": ["QUASI LEGGENDA","PER UN SOFFIO","SFUMATA SUL PIÙ BELLO"],
+    "body": "Saltata per: {missed_leg}",
+    "motivation_pool": [
+      "Non preoccupatevi, la prossima volta sarà nostra. 💪",
+      "Testa alta, domani facciamo rumore. 🚀",
+      "Abbiamo sfiorato la storia, la prossima è nostra. 🏆"
+    ]
+  },
+  "heartbreak": {
+    "title": "💔 <b>CUORI SPEZZATI</b>",
+    "line_pool": [
+      "Il calcio è crudele, noi domani di più.",
+      "Cadiamo in piedi, pronti alla prossima. 💪",
+      "Scivolata a tempo scaduto: testa alta, ripartiamo. 🚀"
+    ]
+  },
+  "stat_flash": {
+    "wrap": "📊 <b>STATISTICA LAMPO</b>\n\n{line}",
+    "phrase_pool": [
+      "{HOME} ha vinto 6 delle ultime 7 in casa.",
+      "{AWAY} ha segnato in 8 delle ultime 9.",
+      "Trend Under 3.5 costante nelle ultime partite.",
+      "Solidità difensiva in evidenza."
+    ]
+  },
+  "story": {
+    "title_pool": [
+      "Il leone contro la preda",
+      "Sfida d’acciaio al tramonto",
+      "Calma piatta prima del gol",
+      "Sangue freddo in area"
+    ],
+    "long_body_pool": [
+      "La tradizione dice equilibrio, ma i numeri raccontano altro. La nostra scelta è chiara: andare controcorrente.",
+      "Partita intensa, ma un dettaglio fa la differenza. Puntiamo lì.",
+      "Abbiamo deciso da che parte stare. Non è solo un pronostico, è una posizione netta.",
+      "Nervi tesi, clima caldo: è qui che si scelgono i momenti giusti."
+    ]
+  },
+  "banter": {
+    "pool": [
+      "Questa è la dritta che fa rumore. 🔥",
+      "La value oggi è tutta dalla nostra parte. 🚀",
+      "Quando i numeri parlano, la cassa risponde. 💎",
+      "La multipla non trema, vola. 🏆",
+      "Il colpo di oggi lo sentono anche i bookmaker. ⚡"
+    ]
+  }
+}
