@@ -51,7 +51,7 @@ def update_betslip_progress(betslip_id: int):
         total = s.execute(text("SELECT legs_count FROM betslips WHERE id=:bid"), {"bid": betslip_id}).scalar()
         s.execute(text("UPDATE betslips SET legs_won=:w WHERE id=:bid"), {"w": won, "bid": betslip_id})
         s.commit()
-        return won, total
+        return int(won or 0), int(total or 0)
 
 def close_betslip_if_done(betslip_id: int):
     with get_session() as s:
@@ -60,10 +60,11 @@ def close_betslip_if_done(betslip_id: int):
         legs_count, legs_won, code, total_odds = int(row[0]), int(row[1]), row[2], float(row[3])
         pending = s.execute(text("SELECT COUNT(*) FROM selections WHERE betslip_id=:bid AND result='PENDING'"),
                             {"bid": betslip_id}).scalar()
-        if pending > 0:
+        if pending and int(pending) > 0:
             return None
         lost = s.execute(text("SELECT COUNT(*) FROM selections WHERE betslip_id=:bid AND result='LOST'"),
                          {"bid": betslip_id}).scalar()
+        lost = int(lost or 0)
         status = "WON" if lost == 0 else ("LOST_1" if lost == 1 else "LOST")
         final_status = "WON" if status=="WON" else "LOST"
         s.execute(text("UPDATE betslips SET status=:st, settled_at=NOW() WHERE id=:bid"),
@@ -75,8 +76,8 @@ def emit_count(kind: str, day: datetime.date):
     with get_session() as s:
         start = datetime.combine(day, datetime.min.time())
         end = datetime.combine(day, datetime.max.time())
-        return s.execute(text("SELECT COUNT(*) FROM emit_log WHERE kind=:k AND at BETWEEN :a AND :b"),
-                         {"k": kind, "a": start, "b": end}).scalar()
+        return int(s.execute(text("SELECT COUNT(*) FROM emit_log WHERE kind=:k AND at BETWEEN :a AND :b"),
+                         {"k": kind, "a": start, "b": end}).scalar() or 0)
 
 def emit_mark(kind: str, at: datetime):
     with get_session() as s:
@@ -107,7 +108,8 @@ def log_error(src: str, message: str, payload: str = None):
         s.execute(text("INSERT INTO error_log (src, message, payload) VALUES (:s, :m, :p)"),
                   {"s": src, "m": message, "p": payload})
         s.commit()
-# --- KV helpers ---
+
+# ---- KV helpers ----
 def kv_get(key: str):
     with get_session() as s:
         row = s.execute(text("SELECT v FROM config_kv WHERE k=:k"), {"k": key}).first()
