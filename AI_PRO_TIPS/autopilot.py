@@ -1,7 +1,7 @@
 import random, json
-from datetime import date
+from datetime import date, timedelta
 from config import Config
-from util import now_tz, in_quiet_hours, time_in_range
+from util import now_tz, in_quiet_hours, time_in_range, parse_dt  # <-- aggiunto parse_dt
 from templates import (
     render_banter_line, render_stat_flash_phrase, render_progress_bar,
     render_story_for_match, render_value_scanner, render_stat_flash  # <-- aggiunto render_stat_flash per override
@@ -59,6 +59,53 @@ class Autopilot:
             arr = []
         arr.append({"home": home, "away": away, "pick": pick, "fixture_id": int(fixture_id)})
         kv_set(key, json.dumps(arr, ensure_ascii=False))
+
+    # ---- FINESTRA DI INVIO GIocate: 3h prima del primo kickoff del giorno  <-- AGGIUNTA
+    def _first_kickoff_dt(self):
+        """Ritorna il datetime (tz locale) del primo kickoff tra i fixture whitelisted di oggi, oppure None."""
+        today = self._today_str()
+        try:
+            from builders import fixtures_allowed_today
+            fixtures = fixtures_allowed_today(self.api, today, self.cfg)
+        except Exception:
+            fixtures = []
+        tz_now = now_tz(self.cfg.TZ).tzinfo
+        first_dt = None
+        for fx in fixtures:
+            iso = (fx.get("fixture",{}) or {}).get("date")
+            dt = parse_dt(iso)
+            if not dt: 
+                continue
+            # normalizza a tz locale
+            try:
+                dt = dt.astimezone(tz_now)
+            except Exception:
+                pass
+            if first_dt is None or dt < first_dt:
+                first_dt = dt
+        return first_dt
+
+    def _quiet_end_today(self):
+        """Ritorna il datetime (oggi) dell'uscita dalle quiet hours (es. 08:00)."""
+        now = now_tz(self.cfg.TZ)
+        q_start, q_end = self.cfg.QUIET_HOURS  # es. (0,8)
+        return now.replace(hour=q_end, minute=0, second=0, microsecond=0)
+
+    def _can_emit_bets_now(self):
+        """
+        True se siamo nella finestra per inviare le GIOCATE:
+        - adesso >= (primo_kickoff - 3h), con rispetto quiet hours (se la finestra cade prima di fine quiet -> inizia a fine quiet)
+        """
+        now = now_tz(self.cfg.TZ)
+        fk = self._first_kickoff_dt()
+        if not fk:
+            return True  # nessun fixture oggi: non bloccare per non paralizzare (giocherà fallback)
+        threshold = fk - timedelta(hours=3)
+        # rispetta quiet hours: se la soglia è prima della fine-quiet, apri alla fine-quiet
+        quiet_end = self._quiet_end_today()
+        if threshold < quiet_end:
+            threshold = quiet_end
+        return now >= threshold
 
     # ---- Emitters ----
     def post_banter(self):
@@ -162,15 +209,18 @@ class Autopilot:
         today = now.date()
         plan = self.cfg.DAILY_PLAN
 
+        # GATE: giocate (value + multiple) solo da 3h prima del primo kickoff (rispettando quiet hours)  <-- AGGIUNTA
+        can_emit_bets = self._can_emit_bets_now()
+
         # 1) Value singles (2/die), distribuite mattina/pomeriggio
-        if emit_count("value_single", today) < plan["value_singles"] and slot in ("morning","afternoon"):
+        if can_emit_bets and emit_count("value_single", today) < plan["value_singles"] and slot in ("morning","afternoon","evening"):
             if self.post_value_single():
                 emit_mark("value_single", now); return
 
         # 2) Multiple: doppia, tripla, quintupla, lunga (8–12)
         produced = emit_count("combo", today)
         combos = plan["combos"]
-        if produced < len(combos) and slot in ("afternoon","evening"):
+        if can_emit_bets and produced < len(combos) and slot in ("afternoon","evening"):
             c = combos[produced]
             legs = random.randint(8,12) if c["legs"] == "8-12" else c["legs"]
             label = {
@@ -179,7 +229,7 @@ class Autopilot:
             if self.post_combo_range(legs, c["leg_lo"], c["leg_hi"], label):
                 emit_mark("combo", now); return
 
-        # 3) Random content
+        # 3) Random content (può uscire anche prima del gate giocate)
         rc = plan["random_content"]
         if emit_count("stat_flash", today) < rc["stat_flash_per_day"]:
             self.post_stat_flash(); emit_mark("stat_flash", now); return
