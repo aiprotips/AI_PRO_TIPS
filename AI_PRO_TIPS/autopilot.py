@@ -7,7 +7,7 @@ from templates import (
     render_stat_flash as render_stat_flash_phrase,  # usiamo la versione con override
     render_progress_bar,
     render_story_long as render_story_for_match,    # storytelling lungo
-    render_value_single as render_value_scanner,    # singola/value unificata
+    render_value_single as render_value_scanner,    # singola/value unificat
     render_stat_flash                               
 )
 from telegram_client import TelegramClient
