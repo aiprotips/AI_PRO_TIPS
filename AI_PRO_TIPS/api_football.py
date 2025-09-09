@@ -16,7 +16,7 @@ class APIFootball:
             raise RuntimeError(f"API-Football error {r.status_code}: {r.text}")
         return r.json()
 
-    # Fixtures
+    # Fixture
     def fixtures_by_date(self, date: str) -> List[Dict]:
         js = self._get("/fixtures", {"date": date})
         return js.get("response", [])
