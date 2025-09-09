@@ -1,6 +1,3 @@
-[build]
-builder = "paketobuildpacks/builder:base"
-
 [deploy]
 restartPolicyType = "on_failure"
 
