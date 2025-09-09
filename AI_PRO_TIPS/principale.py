@@ -7,6 +7,7 @@ from live_engine import LiveEngine
 from db import get_session
 from sqlalchemy import text
 from sql_exec import run_sql_file
+from commands import CommandsLoop   # <--- aggiunto
 
 def ensure_db_and_schema():
     from db import engine
@@ -30,6 +31,7 @@ def main():
 
     auto = Autopilot(cfg, tg, api)
     live = LiveEngine(tg, api)
+    cmds = CommandsLoop(cfg, tg, auto)   # <--- aggiunto
 
     def loop_autopilot():
         while True:
@@ -50,12 +52,22 @@ def main():
                 log_error("live", str(e))
             time.sleep(cfg.LIVE_POLL_SECONDS)
 
+    def loop_commands():   # <--- nuovo loop
+        while True:
+            try:
+                cmds.run_forever()
+            except Exception as e:
+                from repo import log_error
+                log_error("commands", str(e))
+            time.sleep(5)
+
     th1 = threading.Thread(target=loop_autopilot, daemon=True)
     th2 = threading.Thread(target=loop_live, daemon=True)
-    th1.start(); th2.start()
+    th3 = threading.Thread(target=loop_commands, daemon=True)  # <--- thread comandi
+    th1.start(); th2.start(); th3.start()
 
     print("AI Pro Tips running. Ctrl+C per uscire.")
-    tg.notify_admin("AI Pro Tips avviato.")
+    tg.notify_admin("AI Pro Tips avviato (autopilot + live + comandi).")
 
     while True:
         time.sleep(3600)
