@@ -107,3 +107,16 @@ def log_error(src: str, message: str, payload: str = None):
         s.execute(text("INSERT INTO error_log (src, message, payload) VALUES (:s, :m, :p)"),
                   {"s": src, "m": message, "p": payload})
         s.commit()
+# --- KV helpers ---
+def kv_get(key: str):
+    with get_session() as s:
+        row = s.execute(text("SELECT v FROM config_kv WHERE k=:k"), {"k": key}).first()
+        return row[0] if row else None
+
+def kv_set(key: str, value: str):
+    with get_session() as s:
+        s.execute(text("""
+            INSERT INTO config_kv (k, v) VALUES (:k, :v)
+            ON DUPLICATE KEY UPDATE v=:v
+        """), {"k": key, "v": value})
+        s.commit()
