@@ -30,7 +30,7 @@ class LiveEngine:
             mk = json.loads(row["odds_json"])
         except Exception:
             return None
-        # prova a dedurre la favorita guardando la quota più bassa tra 1 e 2
+        # prova a dedurre la favorita guardand la quota più bassa tra 1 e 2
         try:
             o1 = float(mk.get("1")) if "1" in mk else None
             o2 = float(mk.get("2")) if "2" in mk else None
