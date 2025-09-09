@@ -123,7 +123,7 @@ def kv_set(key: str, value: str):
         """), {"k": key, "v": value})
         s.commit()
 
-# ---- Extra helpers per queue/skip/cancel ----
+# ---- Extra helpers per queue/skip/cancel ---
 
 def kv_json_get(key: str):
     import json
