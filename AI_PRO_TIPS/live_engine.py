@@ -4,7 +4,14 @@ from repo import (
     get_open_betslips, get_selections_for_betslip, mark_selection_result,
     update_betslip_progress, close_betslip_if_done, cache_get_fixture, log_error
 )
-from templates import render_live_alert, render_progress_bar, render_celebration, render_quasi_vincente, render_cuori_spezzati
+from templates import (
+    render_live_alert,
+    render_progress_bar,
+    render_quasi_vincente,
+    render_cuori_spezzati,
+    render_celebration_singola,
+    render_celebration_multipla,
+)
 from config import Config
 import json
 
@@ -150,8 +157,51 @@ class LiveEngine:
             status = close_betslip_if_done(bid)
             if status:
                 code = b["code"]
-                if status == "WON":
-                    self.tg.send_message(render_celebration(code, float(b["total_odds"])))
+               if status == "WON":
+    # singola vs multipla
+    legs_count = int(b.get("legs_count", 0))
+    if legs_count <= 1:
+        # trova la selezione (c’è una sola gamba)
+        sel = None
+        for s in sels:
+            if s["betslip_id"] == b["id"]:
+                sel = s
+                break
+        if sel:
+            # score “H–A” se lo hai a portata; altrimenti stringa vuota
+            score = ""
+            # se qui hai già fx/goals, puoi comporre lo score; altrimenti lascia ""
+            self.tg.send_message(
+                render_celebration_singola(
+                    home=sel["home"],
+                    away=sel["away"],
+                    score=score,
+                    pick=sel["market"],
+                    odds=float(sel["odds"]),
+                    link="https://t.me/AIProTips"
+                )
+            )
+        else:
+            # fallback: se per qualche motivo non hai la sel, niente crash
+            self.tg.send_message("🎉 <b>CASSA!</b>")
+    else:
+        # multipla: prepara elenco selezioni formato per il template
+        summary = []
+        for s in sels:
+            summary.append({
+                "home": s["home"],
+                "away": s["away"],
+                "pick": s["market"],
+                # se hai lo score lo metti, altrimenti stringa vuota
+                "score": ""
+            })
+        self.tg.send_message(
+            render_celebration_multipla(
+                selections=summary,
+                total_odds=float(b["total_odds"]),
+                link="https://t.me/AIProTips"
+            )
+        )
                 elif status == "LOST_1":
                     missed = None
                     for sel in sels:
