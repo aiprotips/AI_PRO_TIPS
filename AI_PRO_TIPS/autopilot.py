@@ -3,8 +3,12 @@ from datetime import date, timedelta
 from config import Config
 from util import now_tz, in_quiet_hours, time_in_range, parse_dt  # <-- aggiunto parse_dt
 from templates import (
-    render_banter_line, render_stat_flash_phrase, render_progress_bar,
-    render_story_for_match, render_value_scanner, render_stat_flash  # <-- aggiunto render_stat_flash per override
+    render_banter as render_banter_line,            # nuovo nome -> alias al vecchio
+    render_stat_flash as render_stat_flash_phrase,  # usiamo la versione con override
+    render_progress_bar,
+    render_story_long as render_story_for_match,    # storytelling lungo
+    render_value_single as render_value_scanner,    # singola/value unificata
+    render_stat_flash                               
 )
 from telegram_client import TelegramClient
 from repo import emit_count, emit_mark, create_betslip, add_selection, kv_get, kv_set
