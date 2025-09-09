@@ -4,7 +4,7 @@ import os, json, random, time
 _TPL_PATH = os.path.join(os.path.dirname(__file__), "data", "templates.json")
 _cache = {"ts": 0, "data": {}}
 
-# Fallback minimal (in caso il json non sia presente)
+# Fallback minimal (in caso il json non sia presente
 _FALLBACK = {
     "cta_link": "👉 {link}",
     "emojis_gasanti": ["🔥","🚀","⚡","💎","🏆","🎯","💥","🎉","💪","🧨"],
