@@ -25,6 +25,7 @@ class TelegramClient:
     def notify_admin(self, text: str):
         if self.admin_id:
             self.send_message(text, chat_id=self.admin_id)
+
     def get_updates(self, offset: int = None, timeout: int = 20):
         params = {"timeout": timeout}
         if offset is not None:
