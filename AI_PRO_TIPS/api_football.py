@@ -103,3 +103,44 @@ class APIFootball:
                             elif "away - yes" in lab or lab.strip() in ("away yes",):
                                 put("Away to Score", odd)
         return out
+
+    # -----------------------------
+    # Aggiunte per mapping pick → statistica coerente
+    # -----------------------------
+
+    def team_statistics(self, league_id: int, season: int, team_id: int) -> dict:
+        """
+        Stats squadra nella lega e stagione specificate.
+        API: /teams/statistics?league={id}&season={year}&team={id}
+        Return: dict 'response' (singolo oggetto) oppure {}.
+        """
+        js = self._get("/teams/statistics", {
+            "league": league_id,
+            "season": season,
+            "team": team_id
+        })
+        return js.get("response", {}) or {}
+
+    def team_last_fixtures(self, team_id: int, last: int = 10, league_id: Optional[int] = None, season: Optional[int] = None) -> List[Dict]:
+        """
+        Ultime partite della squadra (opz. filtrate per lega/stagione).
+        API: /fixtures?team={id}&last={n}[&league=..][&season=..]
+        Return: list 'response' (fixtures) o [].
+        """
+        params: Dict[str, Any] = {"team": team_id, "last": last}
+        if league_id: params["league"] = league_id
+        if season: params["season"] = season
+        js = self._get("/fixtures", params)
+        return js.get("response", []) or []
+
+    def head_to_head(self, home_id: int, away_id: int, last: int = 10, league_id: Optional[int] = None) -> List[Dict]:
+        """
+        Scontri diretti tra due squadre.
+        API: /fixtures/headtohead?h2h=homeId-awayId[&last=..][&league=..]
+        Return: list 'response' (fixtures) o [].
+        """
+        h2h = f"{home_id}-{away_id}"
+        params: Dict[str, Any] = {"h2h": h2h, "last": last}
+        if league_id: params["league"] = league_id
+        js = self._get("/fixtures/headtohead", params)
+        return js.get("response", []) or []
