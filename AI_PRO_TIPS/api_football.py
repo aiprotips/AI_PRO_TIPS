@@ -16,6 +16,7 @@ class APIFootball:
             raise RuntimeError(f"API-Football error {r.status_code}: {r.text}")
         return r.json()
 
+    # Fixtures
     def fixtures_by_date(self, date: str) -> List[Dict]:
         js = self._get("/fixtures", {"date": date})
         return js.get("response", [])
@@ -29,6 +30,7 @@ class APIFootball:
         arr = js.get("response", [])
         return arr[0] if arr else None
 
+    # Odds
     def odds_by_fixture(self, fixture_id: int) -> List[Dict]:
         js = self._get("/odds", {"fixture": fixture_id})
         return js.get("response", [])
@@ -37,15 +39,19 @@ class APIFootball:
         js = self._get("/odds", {"date": date})
         return js.get("response", [])
 
+    # Events (best-effort per red card check)
+    def fixture_events(self, fixture_id: int) -> List[Dict]:
+        js = self._get("/fixtures/events", {"fixture": fixture_id})
+        return js.get("response", [])
+
+    # Market parser
     @staticmethod
     def parse_markets(odds_resp: List[Dict]) -> Dict[str, float]:
         out = {}
         def put(k, v):
             if v is None: return
-            try:
-                x = float(v)
-            except:
-                return
+            try: x = float(v)
+            except: return
             if k not in out or x < out[k]:
                 out[k] = x
 
@@ -61,7 +67,7 @@ class APIFootball:
                             if val.startswith("home") or val == "1":
                                 put("1", odd)
                             elif val.startswith("away") or val == "2":
-                                pass
+                                put("2", odd)
                     elif "double chance" in name:
                         for v in vals:
                             lab = v.get("value","").lower()
@@ -70,6 +76,8 @@ class APIFootball:
                                 put("1X", odd)
                             elif "home/away" in lab or lab == "12" or "home or away" in lab:
                                 put("12", odd)
+                            elif "draw/away" in lab or lab in ("x2","X2","draw or away"):
+                                put("X2", odd)
                     elif "draw no bet" in name:
                         for v in vals:
                             lab = v.get("value","").lower()
@@ -82,16 +90,16 @@ class APIFootball:
                         for v in vals:
                             lab = v.get("value","").lower().replace(" ", "")
                             odd = v.get("odd")
-                            if lab in ("under3.5", "u3.5", "under 3.5", "u 3.5"):
+                            if lab in ("under3.5", "u3.5"):
                                 put("Under 3.5", odd)
-                            elif lab in ("over0.5", "o0.5", "over 0.5", "o 0.5"):
+                            elif lab in ("over0.5", "o0.5"):
                                 put("Over 0.5", odd)
                     elif "team to score" in name:
                         for v in vals:
                             lab = v.get("value","").lower()
                             odd = v.get("odd")
-                            if "home - yes" in lab or lab in ("home yes","home yes "):
+                            if "home - yes" in lab or lab.strip() in ("home yes",):
                                 put("Home to Score", odd)
-                            elif "away - yes" in lab or lab in ("away yes","away yes "):
+                            elif "away - yes" in lab or lab.strip() in ("away yes",):
                                 put("Away to Score", odd)
         return out
