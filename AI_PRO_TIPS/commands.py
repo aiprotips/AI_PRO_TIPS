@@ -120,5 +120,8 @@ class CommandsLoop:
                         self._set_offset(offset)
                     self.handle_update(upd)
             except Exception as e:
-                # piccola pausa sulla prossima poll la gestisce Telegram
-                pass
+                # loggalo se vuoi
+                # from repo import log_error
+                # log_error("commands", str(e))
+                import time
+                time.sleep(2)   # <-- evita loop serrato
