@@ -30,21 +30,29 @@ class LiveEngine:
             mk = json.loads(row["odds_json"])
         except Exception:
             return None
-        if "1" in mk or "1X" in mk:
-            return "home"
+        # prova a dedurre la favorita guardando la quota più bassa tra 1 e 2
+        try:
+            o1 = float(mk.get("1")) if "1" in mk else None
+            o2 = float(mk.get("2")) if "2" in mk else None
+            if o1 is not None and o2 is not None:
+                return "home" if o1 <= o2 else "away"
+            if o1 is not None:
+                return "home"
+            if o2 is not None:
+                return "away"
+        except Exception:
+            pass
         return "home"
 
     def _no_red_card_for_favorite(self, fx, fav_side: str) -> bool:
-        # Best-effort: prova a leggere eventi live; se non disponibili, non bloccare l'alert
-        fid = int(fx.get("fixture",{}).get("id"))
+        # Best-effort: se non riusciamo a leggere gli eventi, non blocchiamo l’alert
+        fid = int((fx.get("fixture",{}) or {}).get("id") or 0)
         try:
             events = self.api.fixture_events(fid)
         except Exception:
             events = []
-        if not events:
-            return True
-        fav_name = fx.get("teams",{}).get(fav_side,{}).get("name","")
-        for ev in events:
+        fav_name = (fx.get("teams",{}) or {}).get(fav_side,{}).get("name","")
+        for ev in (events or []):
             if (ev.get("type") == "Card") and (str(ev.get("detail","")).lower().startswith("red")):
                 team_name = (ev.get("team") or {}).get("name","")
                 if team_name == fav_name:
@@ -52,17 +60,20 @@ class LiveEngine:
         return True
 
     def _is_favorite_losing_early(self, fx: dict) -> bool:
+        # limita ai campionati whitelisted
         if self.cfg.ALLOWED_LEAGUES and fx.get("league",{}).get("id") not in self.cfg.ALLOWED_LEAGUES:
             return False
-        info = fx.get("fixture",{})
+        info = fx.get("fixture",{}) or {}
         minute = (info.get("status",{}) or {}).get("elapsed") or 0
-        if not minute or minute > 20: return False
-        fid = int(info.get("id"))
+        if not minute or minute > 20:
+            return False
+        fid = int(info.get("id") or 0)
         fav = self._favorite_side_from_cache(fid) or "home"
-        goals = fx.get("goals",{})
+        goals = fx.get("goals",{}) or {}
         gh, ga = goals.get("home") or 0, goals.get("away") or 0
         losing = (gh < ga) if fav == "home" else (ga < gh)
-        if not losing: return False
+        if not losing:
+            return False
         # niente rosso alla favorita
         return self._no_red_card_for_favorite(fx, fav)
 
@@ -72,142 +83,217 @@ class LiveEngine:
         except Exception as e:
             log_error("live_fav", f"live_fixtures error: {e}")
             return
-        for fx in lives:
-            fid = int(fx.get("fixture",{}).get("id"))
+        for fx in (lives or []):
+            fid = int((fx.get("fixture",{}) or {}).get("id") or 0)
             if fid in self.sent_fav_under_alerts:
                 continue
             if self._is_favorite_losing_early(fx):
-                home = fx.get("teams",{}).get("home",{}).get("name","Home")
-                away = fx.get("teams",{}).get("away",{}).get("name","Away")
-                goals = fx.get("goals",{})
-                score = f"{goals.get('home',0)}–{goals.get('away',0)}"
-                minute = (fx.get("fixture",{}).get("status",{}) or {}).get("elapsed") or 0
-                self.tg.send_message(render_live_alert(f"La favorita è sotto al {minute}’: {home}–{away} {score}"))
+                teams = (fx.get("teams",{}) or {})
+                home = teams.get("home",{}).get("name","Home")
+                away = teams.get("away",{}).get("name","Away")
+                minute = ((fx.get("fixture",{}) or {}).get("status",{}) or {}).get("elapsed") or 0
+                fav_side = self._favorite_side_from_cache(fid) or "home"
+                fav_name = home if fav_side == "home" else away
+                other_name = away if fav_side == "home" else home
+                # Se vuoi integrare quote live, qui puoi aggiungere una fetch ad endpoint live-odds; per ora "n/d".
+                odds_str = "n/d"
+                self.tg.send_message(
+                    render_live_alert(fav_name, other_name, minute, odds_str, "https://t.me/AIProTips")
+                )
                 self.sent_fav_under_alerts.add(fid)
 
     def _resolve_market(self, market: str, gh: int, ga: int, status_short: str):
-        total = (gh or 0) + (ga or 0)
-        if market == "Over 0.5":
-            return "WON" if total >= 1 else ("PENDING" if status_short not in ("FT","AET","PEN") else "LOST")
-        if market == "Home to Score":
-            return "WON" if (gh or 0) >= 1 else ("PENDING" if status_short not in ("FT","AET","PEN") else "LOST")
-        if market == "Away to Score":
-            return "WON" if (ga or 0) >= 1 else ("PENDING" if status_short not in ("FT","AET","PEN") else "LOST")
+        market = (market or "").strip()
+        finished = status_short in ("FT", "AET", "PEN")
+
         if market == "Under 3.5":
-            if status_short in ("FT","AET","PEN"): return "WON" if total <= 3 else "LOST"
+            if finished:
+                return "WON" if (gh + ga) <= 3 else "LOST"
             return "PENDING"
+
+        if market == "Over 0.5":
+            if finished:
+                return "WON" if (gh + ga) >= 1 else "LOST"
+            return "PENDING"
+
         if market == "1":
-            if status_short in ("FT","AET","PEN"): return "WON" if (gh or 0) > (ga or 0) else "LOST"
-            return "PENDING"
-        if market == "1X":
-            if status_short in ("FT","AET","PEN"): return "WON" if (gh or 0) >= (ga or 0) else "LOST"
-            return "PENDING"
-        if market == "12":
-            if status_short in ("FT","AET","PEN"): return "WON" if (gh or 0) != (ga or 0) else "LOST"
-            return "PENDING"
-        if market == "X2":
-            if status_short in ("FT","AET","PEN"): return "WON" if (ga or 0) >= (gh or 0) else "LOST"
-            return "PENDING"
-        if market == "DNB Home":
-            if status_short in ("FT","AET","PEN"):
+            if finished:
                 if (gh or 0) > (ga or 0): return "WON"
                 if (gh or 0) < (ga or 0): return "LOST"
                 return "VOID"
             return "PENDING"
-        if market == "DNB Away":
-            if status_short in ("FT","AET","PEN"):
+
+        if market == "2":
+            if finished:
                 if (ga or 0) > (gh or 0): return "WON"
                 if (ga or 0) < (gh or 0): return "LOST"
                 return "VOID"
             return "PENDING"
+
+        if market == "1X":
+            if finished:
+                if (gh or 0) >= (ga or 0): return "WON"  # home win o draw
+                return "LOST"
+            return "PENDING"
+
+        if market == "X2":
+            if finished:
+                if (ga or 0) >= (gh or 0): return "WON"  # away win o draw
+                return "LOST"
+            return "PENDING"
+
+        if market == "12":
+            if finished:
+                if (gh or 0) != (ga or 0): return "WON"
+                return "LOST"
+            return "PENDING"
+
+        if market == "Home to Score":
+            if finished:
+                return "WON" if (gh or 0) >= 1 else "LOST"
+            return "PENDING"
+
+        if market == "Away to Score":
+            if finished:
+                return "WON" if (ga or 0) >= 1 else "LOST"
+            return "PENDING"
+
+        if market == "DNB Home":
+            if finished:
+                if (gh or 0) > (ga or 0): return "WON"
+                if (gh or 0) < (ga or 0): return "LOST"
+                return "VOID"
+            return "PENDING"
+
+        if market == "DNB Away":
+            if finished:
+                if (ga or 0) > (gh or 0): return "WON"
+                if (ga or 0) < (gh or 0): return "LOST"
+                return "VOID"
+            return "PENDING"
+
         return "PENDING"
 
     def update_betslips_progress_and_close(self):
         open_bets = get_open_betslips()
-        if not open_bets: return
+        if not open_bets:
+            return
+
+        # mappa live per ridurre chiamate API
         live_map = {}
         try:
             lives = self.api.live_fixtures()
-            for fx in lives:
-                fid = int(fx.get("fixture",{}).get("id"))
-                live_map[fid] = fx
+            for fx in (lives or []):
+                fid = int((fx.get("fixture",{}) or {}).get("id") or 0)
+                if fid:
+                    live_map[fid] = fx
         except Exception as e:
             log_error("live_progress", f"live_fixtures error: {e}")
 
         for b in open_bets:
             bid = int(b["id"])
             sels = get_selections_for_betslip(bid)
+
+            # aggiorna i risultati delle selezioni quando definitivi
             for sel in sels:
-                if sel["result"] != "PENDING":
-                    continue
                 fid = int(sel["fixture_id"])
-                fx = live_map.get(fid) or self.api.fixture_by_id(fid)
-                if not fx: continue
-                info = fx.get("fixture",{})
+                fx = live_map.get(fid)
+                if not fx:
+                    try:
+                        fx = self.api.fixture_by_id(fid)
+                    except Exception:
+                        fx = None
+                if not fx:
+                    continue
+                info = fx.get("fixture",{}) or {}
                 status_short = (info.get("status",{}) or {}).get("short") or "NS"
-                goals = fx.get("goals",{})
+                goals = fx.get("goals",{}) or {}
                 gh = goals.get("home") or 0
                 ga = goals.get("away") or 0
                 res = self._resolve_market(sel["market"], gh, ga, status_short)
                 if res in ("WON","LOST","VOID"):
-                    mark_selection_result(sel["id"], res)
-                    w, t = update_betslip_progress(bid)
-                    if t > 1:  # progress bar solo per multiple
-                        self.tg.send_message(render_progress_bar(w, t))
-            status = close_betslip_if_done(bid)
-            if status:
-                code = b["code"]
-               if status == "WON":
-    # singola vs multipla
-    legs_count = int(b.get("legs_count", 0))
-    if legs_count <= 1:
-        # trova la selezione (c’è una sola gamba)
-        sel = None
-        for s in sels:
-            if s["betslip_id"] == b["id"]:
-                sel = s
-                break
-        if sel:
-            # score “H–A” se lo hai a portata; altrimenti stringa vuota
-            score = ""
-            # se qui hai già fx/goals, puoi comporre lo score; altrimenti lascia ""
-            self.tg.send_message(
-                render_celebration_singola(
-                    home=sel["home"],
-                    away=sel["away"],
-                    score=score,
-                    pick=sel["market"],
-                    odds=float(sel["odds"]),
-                    link="https://t.me/AIProTips"
-                )
-            )
-        else:
-            # fallback: se per qualche motivo non hai la sel, niente crash
-            self.tg.send_message("🎉 <b>CASSA!</b>")
-    else:
-        # multipla: prepara elenco selezioni formato per il template
-        summary = []
-        for s in sels:
-            summary.append({
-                "home": s["home"],
-                "away": s["away"],
-                "pick": s["market"],
-                # se hai lo score lo metti, altrimenti stringa vuota
-                "score": ""
-            })
-        self.tg.send_message(
-            render_celebration_multipla(
-                selections=summary,
-                total_odds=float(b["total_odds"]),
-                link="https://t.me/AIProTips"
-            )
-        )
-                elif status == "LOST_1":
-                    missed = None
-                    for sel in sels:
-                        if sel["result"] == "LOST":
-                            missed = f"{sel['home']}–{sel['away']} ({sel['market']})"
+                    try:
+                        mark_selection_result(sel["id"], res)
+                        w, t = update_betslip_progress(bid)
+                        if t > 1:
+                            self.tg.send_message(render_progress_bar(w, t))
+                    except Exception as e:
+                        log_error("live_progress", f"update selection error: {e}")
+
+            # prova a chiudere la schedina
+            try:
+                status = close_betslip_if_done(bid)
+            except Exception as e:
+                log_error("live_progress", f"close bet error: {e}")
+                status = None
+
+            if not status:
+                continue
+
+            code = b["code"]
+            legs_count = int(b.get("legs_count", 0))
+
+            if status == "WON":
+                if legs_count <= 1:
+                    # singola: recupera la selezione
+                    sel = None
+                    for s in sels:
+                        if int(s.get("betslip_id")) == int(b["id"]):
+                            sel = s
                             break
-                    self.tg.send_message(render_quasi_vincente(code, missed or "1 leg"))
+                    if sel:
+                        # prova a costruire lo score finale
+                        score = ""
+                        try:
+                            fx = self.api.fixture_by_id(int(sel["fixture_id"]))
+                            if fx:
+                                goals = fx.get("goals",{}) or {}
+                                score = f"{goals.get('home',0)}–{goals.get('away',0)}"
+                        except Exception:
+                            pass
+                        self.tg.send_message(
+                            render_celebration_singola(
+                                home=sel["home"],
+                                away=sel["away"],
+                                score=score,
+                                pick=sel["market"],
+                                odds=float(sel["odds"]),
+                                link="https://t.me/AIProTips"
+                            )
+                        )
+                    else:
+                        self.tg.send_message("🎉 <b>CASSA!</b>")
                 else:
-                    self.tg.send_message(render_cuori_spezzati(code))
+                    # multipla: riassunto selezioni
+                    summary = []
+                    for s in sels:
+                        score = ""
+                        try:
+                            fx = self.api.fixture_by_id(int(s["fixture_id"]))
+                            if fx:
+                                goals = fx.get("goals",{}) or {}
+                                score = f"{goals.get('home',0)}–{goals.get('away',0)}"
+                        except Exception:
+                            pass
+                        summary.append({
+                            "home": s["home"],
+                            "away": s["away"],
+                            "pick": s["market"],
+                            "score": score
+                        })
+                    self.tg.send_message(
+                        render_celebration_multipla(
+                            selections=summary,
+                            total_odds=float(b["total_odds"]),
+                            link="https://t.me/AIProTips"
+                        )
+                    )
+            elif status == "LOST_1":
+                missed = None
+                for s in sels:
+                    if s.get("result") == "LOST":
+                        missed = f"{s['home']}–{s['away']} ({s['market']})"
+                        break
+                self.tg.send_message(render_quasi_vincente(missed or "1 leg"))
+            else:
+                self.tg.send_message(render_cuori_spezzati())
