@@ -122,3 +122,24 @@ def kv_set(key: str, value: str):
             ON DUPLICATE KEY UPDATE v=:v
         """), {"k": key, "v": value})
         s.commit()
+
+# ---- Extra helpers per queue/skip/cancel ----
+
+def kv_json_get(key: str):
+    import json
+    v = kv_get(key)
+    if not v: return None
+    try:
+        return json.loads(v)
+    except Exception:
+        return None
+
+def kv_json_set(key: str, obj):
+    import json
+    kv_set(key, json.dumps(obj, ensure_ascii=False))
+
+def mark_betslip_cancelled_by_code(code: str) -> bool:
+    with get_session() as s:
+        res = s.execute(text("UPDATE betslips SET status='CANCELLED', settled_at=NOW() WHERE code=:c"), {"c": code})
+        s.commit()
+        return res.rowcount > 0
