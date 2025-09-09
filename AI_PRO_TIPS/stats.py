@@ -76,7 +76,7 @@ def craft_coherent_stat_line(
                     f"({avg_h} e {avg_a} a partita): linea Under 3.5 con basi solide. 📉")
         return (f"Trend prudente per {home_name}–{away_name}: contesti a basso punteggio, Under 3.5 sensato. 📉")
 
-    # ---- OVER 0.5 ----
+    # ---- OVER 0.5 ---
     if "over 0.5" in p:
         try:
             h_scored = st_home["goals"]["for"]["total"]["total"]
