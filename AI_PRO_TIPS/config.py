@@ -9,24 +9,9 @@ class Config:
     MYSQL_URL = os.getenv("MYSQL_URL", "").strip()
     TZ = os.getenv("TZ", "Europe/Rome")
 
-    # Odds target per leg
+    # Odds target generali (usati solo come fallback)
     LEG_ODDS_MIN = float(os.getenv("LEG_ODDS_MIN", "1.20"))
     LEG_ODDS_MAX = float(os.getenv("LEG_ODDS_MAX", "1.35"))
-
-    # Frequenze giornaliere
-    DAILY_COUNTS = {
-        "stat_flash": int(os.getenv("STAT_FLASH_PER_DAY", "2")),
-        "banter": int(os.getenv("BANTER_PER_DAY", "2")),
-        "value_scan": int(os.getenv("VALUE_SCAN_PER_DAY", "1")),
-        "story": int(os.getenv("STORY_PER_DAY", "1")),
-        "parlays": [
-            {"name": "singola_safe", "legs": 1},
-            {"name": "doppia_safe",  "legs": 2},
-            {"name": "tripla_safe",  "legs": 3},
-            {"name": "quad_safe",    "legs": 4},
-            {"name": "sestuple_safe","legs": 6},
-        ],
-    }
 
     # Quiet hours: 00:00–07:59
     QUIET_HOURS = (0, 8)
@@ -41,74 +26,46 @@ class Config:
     LIVE_POLL_SECONDS = int(os.getenv("LIVE_POLL_SECONDS", "75"))
     AUTOPILOT_TICK_SECONDS = int(os.getenv("AUTOPILOT_TICK_SECONDS", "300"))
 
-    # Leghe consentite
+    # Leghe consentite (solo queste verranno usate)
     ALLOWED_LEAGUES = [
         # Italia
-        135,   # Serie A
-        136,   # Serie B
-        137,   # Serie C
-        318,   # Coppa Italia
-
+        135, 136, 137, 318,
         # Inghilterra
-        39,    # Premier League
-        40,    # Championship
-        45,    # FA Cup
-        46,    # EFL Cup
-
+        39, 40, 45, 46,
         # Spagna
-        140,   # La Liga
-        141,   # La Liga 2
-        143,   # Copa del Rey
-
+        140, 141, 143,
         # Germania
-        78,    # Bundesliga
-        79,    # 2. Bundesliga
-        81,    # DFB Pokal
-
+        78, 79, 81,
         # Francia
-        61,    # Ligue 1
-        62,    # Ligue 2
-        66,    # Coupe de France
-
+        61, 62, 66,
         # Portogallo
-        94,    # Primeira Liga
-        96,    # Taça de Portugal
-
+        94, 96,
         # Olanda
-        88,    # Eredivisie
-        90,    # KNVB Beker
-
+        88, 90,
         # Belgio
-        144,   # Jupiler Pro League
-
-        # Austria
-        218,   # Bundesliga
-
-        # Danimarca
-        103,   # Superligaen
-
-        # Romania
-        283,   # Liga I
-
-        # Scozia
-        179,   # Premiership
-
-        # Svizzera
-        207,   # Super League
-
-        # Turchia
-        203,   # Super Lig
-
-        # Competizioni internazionali
-        2,     # UEFA Champions League
-        3,     # UEFA Europa League
-        848,   # Conference League
-        4,     # World Cup
-        10,    # Copa Libertadores
-        11,    # Copa Sudamericana
-
+        144,
+        # Austria / Danimarca / Romania / Scozia / Svizzera / Turchia
+        218, 103, 283, 179, 207, 203,
+        # Coppe europee + Mondiali
+        2, 3, 848, 4,
+        # Sudamerica
+        10, 11,
         # Extra consigliati
-        71,    # Brasile Serie A
-        128,   # Argentina Primera Division
-        253,   # MLS (USA)
+        71, 128, 253,
     ]
+
+    # Piano giornaliero
+    DAILY_PLAN = {
+        "value_singles": 2,   # 2 singole (1.50–1.80)
+        "combos": [
+            {"name": "doppia",    "legs": 2,    "leg_lo": 1.30, "leg_hi": 1.50},
+            {"name": "tripla",    "legs": 3,    "leg_lo": 1.20, "leg_hi": 1.50},
+            {"name": "quintupla", "legs": 5,    "leg_lo": 1.20, "leg_hi": 1.50},
+            {"name": "lunga",     "legs": "8-12","leg_lo": 1.10, "leg_hi": 1.36},
+        ],
+        "random_content": {
+            "stat_flash_per_day": 2,
+            "banter_per_day": 2,
+            "story_per_day": 1
+        }
+    }
