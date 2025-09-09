@@ -1,44 +1,146 @@
 {
-  "banter": [
-    "Quote più basse della linea difensiva al 90’. 😏",
-    "Multipla più sexy di un gol al 94’.",
-    "Oggi la VAR la facciamo noi: verifichiamo solo casse. ✅",
-    "Questa quota è più pulita di un contropiede al 92’.",
-    "Non è fortune-telling, è foot-telling. 😉",
-    "Con questi leg, la cassa è una formalità burocratica.",
-    "Il portiere avversario? Già con i guanti sporchi."
-  ],
-  "celebrations": [
-    "CASSA!", "IN CASSA!", "LO SHOW CONTINUA!", "VOLANO I TICKET!",
-    "ABBASSATE LE SARACINESCHE: CASSA!", "TIMBRATO! ✅", "FIREWORKS IN CHAT! 🎆"
-  ],
-  "almost_win": [
-    "A un passo dalla leggenda… 💔",
-    "Quasi… ma domani facciamo più rumore. 💔",
-    "Ci ha tradito l’ultimo rimbalzo. 💔",
-    "Una curva prima del traguardo. 💔",
-    "Bruciata sulla linea: non molliamo. 💔"
-  ],
-  "heartbreak": [
-    "Abbiamo preso più gol noi di un portiere bendato. 💔",
-    "Il calcio è crudele, ma noi domani di più. 😤",
-    "Appuntamento rimandato con la storia. 💔",
-    "Cadiamo in piedi, pronti alla prossima. 💔",
-    "Oggi non era scritto. Domani lo riscriviamo. 💔"
-  ],
-  "story_titles": [
-    "Il leone contro la preda",
-    "Sfida d’acciaio al tramonto",
-    "Notte di casse (o quasi)",
-    "Calma piatta prima del gol",
-    "Il colpo facile",
-    "Sangue freddo in area"
-  ],
-  "stat_flash_phrases": [
-    "Negli ultimi 8, {HOME} ha segnato in 6 partite. {HOME}–{AWAY} oggi può sbloccarsi presto.",
-    "{HOME} imbattuta in 7/9: oggi {HOME}–{AWAY} promette solidità.",
-    "{AWAY} concede spesso nel primo tempo: occhio all’avvio in {HOME}–{AWAY}.",
-    "Le ultime 5 di {HOME}: 4 Over 0.5. {HOME}–{AWAY} da sbloccare.",
-    "DNB {HOME}? Storicamente coperta contro {AWAY}."
-  ]
+  "cta_link": "👉 {link}",
+
+  "emojis_gasanti": ["🔥","🚀","⚡","💎","🏆","🎯","💥","🎉","💪","🧨"],
+
+  "value_single": {
+    "title": "🔎 <b>VALUE SCANNER</b>",
+    "outro_pool": [
+      "Andiamo a prendercela.",
+      "La dritta del giorno.",
+      "Troppa value per lasciarla lì.",
+      "Biglietto d’ingresso per la cassa.",
+      "Scelta secca, colpo deciso."
+    ]
+  },
+
+  "multipla": {
+    "title_map": {
+      "2": "🧩 <b>DOPPIA</b> 🧩",
+      "3": "🎻 <b>TRIPLA</b> 🎻",
+      "5": "🎬 <b>QUINTUPLA</b> 🎬",
+      "long": "💎 <b>SUPER COMBO</b> 💎"
+    },
+    "leg_line": "• {home} 🆚 {away}\n   🎯 {pick} — <b>{odds:.2f}</b>",
+    "footer": "💰 Quota totale: <b>{total_odds:.2f}</b>\n🕒 Calcio d’inizio: {kickoff}",
+    "outro_pool": [
+      "Una a una fino alla cassa.",
+      "Solide, senza rischi inutili.",
+      "Puntiamo all’effetto domino.",
+      "Rumore controllato, risultato pesante.",
+      "Si entra leggeri, si esce rumorosi."
+    ]
+  },
+
+  "live_alert": {
+    "title": "⚡ <b>LIVE ALERT</b> ⚡",
+    "body": "⏱️ {minute}’ — la favorita <b>{fav}</b> è sotto contro {other}.\nQuota live: {odds_str}",
+    "outro_pool": [
+      "Situazione perfetta per rientrare.",
+      "Pressione alta: l’inerzia può girare.",
+      "Finestra breve: si entra o si lascia.",
+      "Teniamo il radar acceso.",
+      "Match vivo: gestione aggressiva."
+    ]
+  },
+
+  "live_celebration": {
+    "title_pool": [
+      "COLPO LIVE!",
+      "CHE RIMONTA!",
+      "LET’S GO!",
+      "LIVE DA PAURA!",
+      "PRESO IN DIRETTA!"
+    ]
+  },
+
+  "progress": {
+    "format": "Avanzamento schedina: {bar} ({taken}/{total})"
+  },
+
+  "celebrations": {
+    "title_pool": [
+      "CASSA!",
+      "IN CASSA!",
+      "VOLANO I TICKET!",
+      "COLPO CHIUSO!",
+      "LO SHOW CONTINUA!"
+    ],
+    "singola": "{home} 🆚 {away}\nRisultato: <b>{score}</b>\nPick: {pick} ✅ @ <b>{odds:.2f}</b>",
+    "multipla_leg_line": "• {home} 🆚 {away}\nRisultato: {score}\nPick: {pick} ✅",
+    "multipla_footer": "Quota totale: <b>{total_odds:.2f}</b>"
+  },
+
+  "almost_win": {
+    "title_pool": [
+      "QUASI LEGGENDA",
+      "CI MANCAVA SOLO QUELLA",
+      "PER UN SOFFIO",
+      "SFUMATA SUL PIÙ BELLO"
+    ],
+    "body": "Saltata per: {missed_leg}",
+    "motivation_pool": [
+      "Non preoccupatevi, la prossima volta sarà nostra. 💪🔥",
+      "Testa alta, domani si torna a far rumore. 🚀",
+      "Abbiamo sfiorato la storia, la prossima la scriviamo noi. 🏆",
+      "Un dettaglio ci ha fermati oggi, ma non ci fermerà domani. ⚡",
+      "Sfuggita sul più bello, ma la prossima la portiamo a casa. 💥"
+    ]
+  },
+
+  "heartbreak": {
+    "title": "💔 <b>CUORI SPEZZATI</b>",
+    "line_pool": [
+      "Il calcio è crudele, noi domani di più. 😤",
+      "Appuntamento rimandato con la storia, ma ci torniamo presto. 🔥",
+      "Cadiamo in piedi, pronti alla prossima. 💪",
+      "Scivolata a tempo scaduto: testa alta, ripartiamo. 🚀",
+      "Oggi no, domani sì. La cassa non scappa. 🏆",
+      "Traditi da più di una gamba, ma la direzione resta quella giusta. 🎯",
+      "Non si vince sempre, ma si lotta sempre. La prossima è nostra. ⚡"
+    ]
+  },
+
+  "stat_flash": {
+    "wrap": "📊 <b>STATISTICA LAMPO</b>\n\n{line}",
+    "phrase_pool": [
+      "La Juventus ha vinto 6 delle ultime 7 in casa: oggi parte favorita contro {AWAY}. 🔥",
+      "Il Napoli ha segnato in 8 delle ultime 9: la linea Over 0.5 sembra blindata. ⚡",
+      "L’Inter ha mantenuto la porta inviolata in 5 delle ultime 6: la solidità difensiva è un fattore. 🧱",
+      "Real Sociedad con 7 Under 3.5 nelle ultime 8: trend chiaro anche oggi contro {AWAY}. 📉",
+      "Il Celtic ha vinto 4 delle ultime 5 contro {AWAY}: tradizione favorevole. 🏆"
+    ]
+  },
+
+  "story": {
+    "title_pool": [
+      "Il leone contro la preda",
+      "Sfida d’acciaio al tramonto",
+      "Calma piatta prima del gol",
+      "Sangue freddo in area",
+      "Il colpo facile"
+    ],
+    "long_body_pool": [
+      "La tradizione dice equilibrio, ma i numeri raccontano altro. La nostra scelta è chiara: andare controcorrente. Il campo darà il verdetto, ma noi ci siamo. 🔥",
+      "Partita che promette intensità. Entrambe le squadre arrivano con motivazioni alte, ma un dettaglio fa la differenza. Puntiamo lì, senza fronzoli. 🚀",
+      "Le ultime settimane hanno mostrato fragilità da una parte e solidità dall’altra. Noi abbiamo deciso da che parte stare. Non è solo un pronostico, è una posizione netta. 💪",
+      "Non sarà una sfida semplice: nervi tesi, clima caldo. Ma proprio in queste condizioni emerge chi sa scegliere il momento giusto. E noi lo facciamo adesso. ⚡",
+      "I bookmaker vedono equilibrio, ma noi leggiamo segnali diversi. È qui che si costruiscono le casse: scelte decise quando tutti vedono nebbia. 🌫️➡️🏆"
+    ]
+  },
+
+  "banter": {
+    "pool": [
+      "Questa è la dritta che fa rumore. 🔥",
+      "La value oggi è tutta dalla nostra parte. 🚀",
+      "Quando i numeri parlano, la cassa risponde. 💎",
+      "La multipla non trema, vola. 🏆",
+      "Il colpo di oggi lo sentono anche i bookmaker. ⚡",
+      "Scelta secca, cassa certa. 🎯",
+      "Noi anticipiamo, gli altri inseguono. 💨",
+      "Il mercato dorme, noi no. 😎",
+      "Oggi la quota diventa legge. 📜",
+      "Ogni pick è un passo verso la cassa. 💪"
+    ]
+  }
 }
