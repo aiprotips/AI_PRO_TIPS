@@ -1,0 +1,1 @@
+-r AI_PRO_TIPS/requisiti.txt
