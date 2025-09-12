@@ -1,16 +1,21 @@
 from typing import Dict, Any
 import json, random
 from sqlalchemy import text
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo  # <-- conversione orari
 from datetime import datetime, timezone
 from .config import Config
 from .util import now_tz
 from .telegram_client import TelegramClient
 from .autopilot import Autopilot
-from .repo import kv_get, kv_set, schedule_get_today, schedule_get_by_short_id, schedule_cancel_by_short_id, schedule_cancel_all_today, schedule_enqueue, emit_count
+from .repo import (
+    kv_get, kv_set,
+    schedule_get_today, schedule_get_by_short_id,
+    schedule_cancel_by_short_id, schedule_delete_all_today,  # <-- usa delete fisico per oggi
+    schedule_enqueue, emit_count
+)
 from .templates import render_value_single, render_multipla
 from .builders import fixtures_allowed_today, build_value_single, build_combo_with_range, calc_send_at_for_combo
-from .sender import _render_value_now, _render_combo_now  # usa rendere realtime per preview
+from .sender import _render_value_now, _render_combo_now  # preview realtime
 
 HELP_TEXT = (
     "🤖 <b>AI Pro Tips — Comandi</b>\n"
@@ -24,7 +29,7 @@ HELP_TEXT = (
     "/publish ID — pubblica ora una schedina\n"
     "/resched ID HH:MM — sposta orario invio\n"
     "/cancel ID — annulla schedina in coda\n"
-    "/cancel_all — annulla tutte le schedine di oggi\n"
+    "/cancel_all — elimina TUTTI i record di oggi (anche inviate)\n"
     "/gen [--dry|value|combo N] — rigenera o genera ad hoc\n"
     "/check_today — match whitelisted di oggi\n"
     "/check_picks — pick del giorno & quote\n"
@@ -87,18 +92,13 @@ class CommandsLoop:
             if len(parts)>=2 and parts[1].isdigit():
                 sid = parts[1]; rec = schedule_get_by_short_id(sid)
                 if not rec: self._reply(chat_id, "ID non trovato."); return
-                # render realtime se payload è JSON
                 payload = rec["payload"] or ""
                 text_preview = None
                 if isinstance(payload, str) and payload[:1] in ("{","["):
-                    data = json.loads(payload)
-                    kind = (rec.get("kind") or "").lower()
-                    if kind == "value":
-                        text_preview = _render_value_now(self.auto.api, self.cfg, data)
-                    elif kind == "combo":
-                        text_preview = _render_combo_now(self.auto.api, self.cfg, data)
-                if not text_preview:
-                    text_preview = payload
+                    data = json.loads(payload); kind = (rec.get("kind") or "").lower()
+                    if kind == "value": text_preview = _render_value_now(self.auto.api, self.cfg, data)
+                    elif kind == "combo": text_preview = _render_combo_now(self.auto.api, self.cfg, data)
+                if not text_preview: text_preview = payload
                 send_utc = rec["send_at"].replace(tzinfo=ZoneInfo("UTC"))
                 when = send_utc.astimezone(ZoneInfo(self.cfg.TZ)).strftime("%H:%M")
                 self._reply(chat_id, f"ID <b>{sid}</b> — invio: <b>{when}</b>\n\n{text_preview}"); return
@@ -111,12 +111,9 @@ class CommandsLoop:
                     text_preview = None
                     if isinstance(payload, str) and payload[:1] in ("{","["):
                         try:
-                            data = json.loads(payload)
-                            kind = (r.get("kind") or "").lower()
-                            if kind == "value":
-                                text_preview = _render_value_now(self.auto.api, self.cfg, data)
-                            elif kind == "combo":
-                                text_preview = _render_combo_now(self.auto.api, self.cfg, data)
+                            data = json.loads(payload); kind = (r.get("kind") or "").lower()
+                            if kind == "value": text_preview = _render_value_now(self.auto.api, self.cfg, data)
+                            elif kind == "combo": text_preview = _render_combo_now(self.auto.api, self.cfg, data)
                         except Exception:
                             text_preview = payload
                     else:
@@ -131,16 +128,12 @@ class CommandsLoop:
             if len(parts)<2: self._reply(chat_id, "Uso: /publish ID"); return
             sid=parts[1].strip(); rec=schedule_get_by_short_id(sid)
             if not rec or rec["status"]!="QUEUED": self._reply(chat_id, "ID non trovato o non in coda."); return
-            # forza render realtime
             payload = rec["payload"] or ""
             text_to_send = payload
             if isinstance(payload, str) and payload[:1] in ("{","["):
-                data = json.loads(payload)
-                kind = (rec.get("kind") or "").lower()
-                if kind == "value":
-                    text_to_send = _render_value_now(self.auto.api, self.cfg, data)
-                elif kind == "combo":
-                    text_to_send = _render_combo_now(self.auto.api, self.cfg, data)
+                data = json.loads(payload); kind = (rec.get("kind") or "").lower()
+                if kind == "value": text_to_send = _render_value_now(self.auto.api, self.cfg, data)
+                elif kind == "combo": text_to_send = _render_combo_now(self.auto.api, self.cfg, data)
             if not text_to_send:
                 self._reply(chat_id, "Quote non disponibili ora, riprova tra poco."); return
             self.tg.send_message(text_to_send)
@@ -166,49 +159,44 @@ class CommandsLoop:
             return
 
         if low.startswith("/cancel_all"):
-            from .repo import schedule_cancel_all_today
-            n=schedule_cancel_all_today(); self._reply(chat_id, f"🛑 Cancellate <b>{n}</b> schedine in coda oggi."); return
+            n = schedule_delete_all_today()  # <-- ELIMINA fisicamente tutto oggi (anche SENT)
+            self._reply(chat_id, f"🧹 Eliminati <b>{n}</b> record di oggi da scheduled_messages."); return
 
         if low.startswith("/cancel "):
             parts=text_in.split()
             if len(parts)<2: self._reply(chat_id, "Uso: /cancel ID"); return
             sid=parts[1].strip(); n=schedule_cancel_by_short_id(sid)
-            self._reply(chat_id, "✅ Annullata." if n>0 else "❌ ID non trovato o già inviata."); return
+            self._reply(chat_id, "✅ Annullata." if n>0 else "❌ ID non trovato o non in coda."); return
 
         if low.startswith("/gen"):
             parts=text_in.split()
-            # DRY preview: render con quote attuali
             if "--dry" in parts:
                 today=now_tz(self.cfg.TZ).strftime("%Y-%m-%d"); used=set(); previews=[]
-                # 2 value
                 for _ in range(self.cfg.DAILY_PLAN["value_singles"]):
                     sgl=build_value_single(self.auto.api, today, self.cfg, used)
                     if sgl:
-                        payload={"type":"value","selection":sgl}
+                        payload={"type":"value","selection":sgl,"range":{"lo":1.50,"hi":1.80}}
                         text_preview = _render_value_now(self.auto.api, self.cfg, payload)
                         if text_preview: previews.append(text_preview)
-                # combos
                 for conf in self.cfg.DAILY_PLAN["combos"]:
                     legs=conf["legs"]; 
                     if isinstance(legs,str) and legs=="8-12": legs = random.randint(8,12)
                     cmb=build_combo_with_range(self.auto.api, today, legs, float(conf["leg_lo"]), float(conf["leg_hi"]), self.cfg, used)
                     if cmb:
-                        payload={"type":"combo","selections":cmb}
+                        payload={"type":"combo","selections":cmb,"range":{"lo":float(conf["leg_lo"]),"hi":float(conf["leg_hi"])}}
                         text_preview = _render_combo_now(self.auto.api, self.cfg, payload)
                         if text_preview: previews.append(text_preview)
                 self._reply(chat_id, "<b>Anteprima (dry)</b>\n\n"+("\n\n——————————\n\n".join(previews) if previews else "Niente da generare.")); return
 
-            # /gen value -> accoda JSON e calcola T-3h
             if len(parts)>=2 and parts[1]=="value":
                 today=now_tz(self.cfg.TZ).strftime("%Y-%m-%d"); used=set(); sgl=build_value_single(self.auto.api, today, self.cfg, used)
                 if not sgl: self._reply(chat_id, "Nessuna singola disponibile."); return
                 sid="V"+str(random.randint(10000,99999))[1:]
                 send_at_utc = calc_send_at_for_combo([sgl], self.cfg.TZ).strftime("%Y-%m-%d %H:%M:%S")
-                payload_json = json.dumps({"type":"value","selection":sgl}, ensure_ascii=False)
-                schedule_enqueue(sid, "value", payload_json, send_at_utc)
-                self._reply(chat_id, f"Accodata singola (ID {sid}) — invio alle {now_tz(self.cfg.TZ).astimezone(ZoneInfo(self.cfg.TZ)).strftime('%H:%M') if False else send_at_utc} UTC."); return
+                payload = {"type":"value","selection":sgl,"range":{"lo":1.50,"hi":1.80}}
+                schedule_enqueue(sid, "value", json.dumps(payload, ensure_ascii=False), send_at_utc)
+                self._reply(chat_id, f"Accodata singola (ID {sid})."); return
 
-            # /gen combo N
             if len(parts)>=3 and parts[1]=="combo":
                 try: n=int(parts[2])
                 except: self._reply(chat_id, "Uso: /gen combo N  (N=2,3,4,5,8..12)"); return
@@ -218,11 +206,10 @@ class CommandsLoop:
                 if not cmb: self._reply(chat_id, "Nessuna multipla disponibile."); return
                 sid="C"+str(random.randint(10000,99999))[1:]
                 send_at_utc = calc_send_at_for_combo(cmb, self.cfg.TZ).strftime("%Y-%m-%d %H:%M:%S")
-                payload_json = json.dumps({"type":"combo","selections":cmb}, ensure_ascii=False)
-                schedule_enqueue(sid, "combo", payload_json, send_at_utc)
+                payload = {"type":"combo","selections":cmb,"range":{"lo":lo,"hi":hi}}
+                schedule_enqueue(sid, "combo", json.dumps(payload, ensure_ascii=False), send_at_utc)
                 self._reply(chat_id, f"Accodata multipla x{n} (ID {sid})."); return
 
-            # default: rigenera planner
             kv_set(self.auto._planned_key(), ""); self.auto.run_daily_planner(force=True); self._reply(chat_id, "🔧 Pianificazione giornaliera rigenerata."); return
 
         if low.startswith("/check_today"):
@@ -236,16 +223,16 @@ class CommandsLoop:
             self._reply(chat_id, "<b>Match whitelisted</b>\n"+ "\n".join(out)); return
 
         if low.startswith("/check_picks"):
-            # invariato: pool interno di coerenza
             try: arr=json.loads(kv_get(self.auto._picks_key()) or "[]")
             except Exception: arr=[]
             if not arr: self._reply(chat_id, "Nessun pick nel pool di oggi."); return
             out=[]
             for rec in arr[:20]:
-                fx=self.auto.api.fixture_by_id(rec.get("fixture_id",0))
-                if not fx: out.append(f"• {rec.get('home','?')}–{rec.get('away','?')} | {rec.get('pick','?')} | fixture {rec.get('fixture_id','?')} n/d"); continue
-                try: mk=self.auto.api.parse_markets_bet365(self.auto.api.odds_by_fixture(rec["fixture_id"])); val=mk.get(rec["pick"], "n/d")
-                except Exception: val="n/d"
+                try:
+                    mk=self.auto.api.parse_markets_bet365(self.auto.api.odds_by_fixture(rec["fixture_id"]))
+                    val=mk.get(rec["pick"], "n/d")
+                except Exception:
+                    val="n/d"
                 out.append(f"• {rec.get('home','?')}–{rec.get('away','?')} | {rec.get('pick','?')} → <b>{val}</b>")
             self._reply(chat_id, "<b>Controllo pick & quote</b>\n"+ "\n".join(out)); return
 
