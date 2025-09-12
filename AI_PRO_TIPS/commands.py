@@ -209,6 +209,33 @@ class CommandsLoop:
             parts=text_in.split()
             if len(parts)<2: self._reply(chat_id, "Uso: /where FIXTURE_ID"); return
             fxid=parts[1].strip(); self._reply(chat_id, f"FIXTURE_ID {fxid}: presente in pianificazione odierna (se generata)."); return
+                    # /debug_odds FIXTURE_ID  -> stampa la mappa quote Bet365 reali per quella partita
+        if low.startswith("/debug_odds"):
+            parts = text_in.split()
+            if len(parts) < 2:
+                self._reply(chat_id, "Uso: /debug_odds FIXTURE_ID")
+                return
+            try:
+                fid = int(parts[1])
+            except:
+                self._reply(chat_id, "FIXTURE_ID non valido")
+                return
+            try:
+                mk = self.auto.api.parse_markets_bet365(self.auto.api.odds_by_fixture(fid))
+                # mostro solo i mercati che usiamo
+                keys_order = ("1","X","2","1X","X2","12","DNB Home","DNB Away",
+                              "Under 3.5","Over 0.5","Over 1.5","Over 2.5","Under 2.5",
+                              "Home to Score","Away to Score","Gol","No Gol")
+                lines = []
+                for k in keys_order:
+                    if k in mk:
+                        lines.append(f"{k}: {mk[k]}")
+                if not lines:
+                    lines = [f"(Nessun mercato Bet365 trovato per {fid})"]
+                self._reply(chat_id, "<b>Bet365 (fixture "+str(fid)+")</b>\n" + "\n".join(lines))
+            except Exception as e:
+                self._reply(chat_id, f"Errore: {e}")
+            return
 
         self._reply(chat_id, "Comando non riconosciuto. Usa /help")
 
