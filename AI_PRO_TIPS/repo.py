@@ -105,7 +105,7 @@ def schedule_due_now(limit: int = 10):
     with get_session() as s:
         return s.execute(text("""
             SELECT * FROM scheduled_messages
-            WHERE status='QUEUED' AND send_at <= NOW()
+            WHERE status='QUEUED' AND send_at <= UTC_TIMESTAMP()
             ORDER BY send_at ASC
             LIMIT :lim
         """), {"lim": limit}).mappings().all()
