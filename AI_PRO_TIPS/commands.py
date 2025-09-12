@@ -10,7 +10,7 @@ from .autopilot import Autopilot
 from .repo import kv_get, kv_set, schedule_get_today, schedule_get_by_short_id, schedule_cancel_by_short_id, schedule_cancel_all_today, schedule_enqueue, emit_count
 from .templates import render_value_single, render_multipla
 from .builders import fixtures_allowed_today, build_value_single, build_combo_with_range, calc_send_at_for_combo
-from .sender import _render_value_now, _render_combo_now  # usa renderer realtime per preview
+from .sender import _render_value_now, _render_combo_now  # usa rendere realtime per preview
 
 HELP_TEXT = (
     "🤖 <b>AI Pro Tips — Comandi</b>\n"
