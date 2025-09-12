@@ -8,9 +8,9 @@ from .config import Config
 from .templates import render_value_single, render_multipla
 from .repo import schedule_due_now, schedule_mark_sent, schedule_reschedule, log_error
 
-MAX_RETRIES = 5         # quante volte riprovare se la quota reale non è disponibile
-RETRY_DELAY_MIN = 2     # minuti tra i retry
-MIN_ODD_VALID = 1.06    # sotto questo valore, odd considerata non valida (sospesa)
+MAX_RETRIES = 6         # fino a ~12 minuti di attesa
+RETRY_DELAY_MIN = 2
+MIN_ODD_VALID = 1.06
 
 def _fmt_local(kick_iso: str, tz: str) -> str:
     try:
@@ -66,27 +66,37 @@ def _render_combo_now(api: APIFootball, cfg: Config, payload: dict) -> str | Non
         return None
     return render_multipla(events, float(total), _fmt_local(min_kick, cfg.TZ), cfg.CHANNEL_LINK)
 
-def _retry_or_log(id_, reason: str):
-    try:
-        new_dt = (datetime.now(timezone.utc) + timedelta(minutes=RETRY_DELAY_MIN)).strftime("%Y-%m-%d %H:%M:%S")
-        schedule_reschedule(id_, new_dt)
-    except Exception as e:
-        log_error("sender", f"resched fail id={id_}: {e}")
-    log_error("sender", f"id={id_} rimandato: {reason}")
+def _resched_with_retry(rec: dict, reason: str):
+    rec_id = rec["id"]
+    # bump retry counter in notes
+    notes = (rec.get("notes") or "")
+    try_count = 0
+    if notes.startswith("retry="):
+        try_count = int(notes.split("=",1)[1])
+    if try_count >= MAX_RETRIES:
+        log_error("sender", f"id={rec_id} max retry; motivo: {reason}")
+        return  # resta QUEUED, ma non spingiamo più
+    new_dt = (datetime.now(timezone.utc) + timedelta(minutes=RETRY_DELAY_MIN)).strftime("%Y-%m-%d %H:%M:%S")
+    from .db import get_session
+    from sqlalchemy import text
+    with get_session() as s:
+        s.execute(text("UPDATE scheduled_messages SET send_at=:sa, notes=:n WHERE id=:i AND status='QUEUED'"),
+                  {"sa": new_dt, "n": f"retry={try_count+1}", "i": rec_id})
+        s.commit()
+    log_error("sender", f"id={rec_id} rimandato: {reason}")
 
 def process_due_messages(tg: TelegramClient, api: APIFootball, cfg: Config):
     due = schedule_due_now(limit=30)
     for rec in due:
-        rec_id = rec["id"]; kind = (rec.get("kind") or "").lower()
         payload = rec.get("payload") or ""
+        kind = (rec.get("kind") or "").lower()
         text_to_send = None
 
-        # payload JSON -> rigenera con quote reali e valida il range
         if isinstance(payload, str) and payload[:1] in ("{","["):
             try:
                 data = json.loads(payload)
             except Exception as e:
-                log_error("sender", f"payload json parse error id={rec_id}: {e}")
+                log_error("sender", f"payload json parse error id={rec['id']}: {e}")
                 text_to_send = payload
             else:
                 if kind == "value":
@@ -97,32 +107,14 @@ def process_due_messages(tg: TelegramClient, api: APIFootball, cfg: Config):
                     text_to_send = data.get("text")
 
                 if not text_to_send:
-                    # controllo retry count semplice su notes
-                    notes = (rec.get("notes") or "")
-                    try_count = 0
-                    if notes and notes.startswith("retry="):
-                        try_count = int(notes.split("=",1)[1])
-                    if try_count >= MAX_RETRIES:
-                        log_error("sender", f"id={rec_id} max retry raggiunto; resta in QUEUED")
-                        continue
-                    # aggiorna notes + rimanda di 2'
-                    try:
-                        new_dt = (datetime.now(timezone.utc) + timedelta(minutes=RETRY_DELAY_MIN)).strftime("%Y-%m-%d %H:%M:%S")
-                        from .db import get_session
-                        with get_session() as s:
-                            s.execute(text("UPDATE scheduled_messages SET send_at=:sa, notes=:n WHERE id=:i AND status='QUEUED'"),
-                                      {"sa": new_dt, "n": f"retry={try_count+1}", "i": rec_id})
-                            s.commit()
-                    except Exception as e:
-                        log_error("sender", f"resched fail id={rec_id}: {e}")
+                    _resched_with_retry(rec, "odd non disponibile o fuori range/freschezza")
                     continue
         else:
-            # legacy: invia comunque (ma CONSIGLIO: pianifica sempre JSON)
+            # legacy: manda così (sconsigliato)
             text_to_send = payload
 
         try:
-            if text_to_send:
-                tg.send_message(text_to_send)
-                schedule_mark_sent(rec_id)
+            tg.send_message(text_to_send)
+            schedule_mark_sent(rec["id"])
         except Exception as e:
-            log_error("sender", f"send fail id={rec_id}: {e}")
+            log_error("sender", f"send fail id={rec['id']}: {e}")
