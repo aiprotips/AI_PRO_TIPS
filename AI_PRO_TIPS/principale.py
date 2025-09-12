@@ -1,45 +1,74 @@
-import time, threading
+import os, time, threading, pathlib
 from sqlalchemy import text
 from .config import Config
-from .db import engine
 from .telegram_client import TelegramClient
 from .api_football import APIFootball
 from .autopilot import Autopilot
 from .live_engine import LiveEngine
-from .commands import CommandsLoop
+from .db import get_session
+from .sql_exec import run_sql_file
+from .sender import process_due_messages
+
+def ensure_db_and_schema():
+    from .db import engine
+    with engine.begin() as conn:
+        conn.execute(text("SELECT 1"))
+    sql_path = pathlib.Path(__file__).parent / "migrazioni" / "001_init.sql"
+    if sql_path.exists():
+        try:
+            run_sql_file(str(sql_path))
+            print("[BOOT] Migrazioni applicate/già presenti.")
+        except Exception as e:
+            print("[BOOT] Errore migrazioni:", e)
 
 def main():
     cfg = Config()
-    with engine.begin() as conn: conn.execute(text("SELECT 1"))
     tg = TelegramClient(cfg.TELEGRAM_TOKEN, cfg.CHANNEL_ID, cfg.ADMIN_ID)
     api = APIFootball(cfg.APIFOOTBALL_KEY, cfg.TZ)
+
+    ensure_db_and_schema()
+
     auto = Autopilot(cfg, tg, api)
     live = LiveEngine(tg, api, cfg)
-    cmd  = CommandsLoop(cfg, tg, auto)
 
     def loop_autopilot():
         while True:
-            try: auto.run_once()
-            except Exception as e: tg.notify_admin(f"[autopilot] {e}")
-            time.sleep(30)
+            try:
+                auto.run_once()
+            except Exception as e:
+                from .repo import log_error
+                log_error("autopilot", str(e))
+            time.sleep(cfg.AUTOPILOT_TICK_SECONDS)
 
     def loop_live():
         while True:
             try:
                 live.check_favorite_under_20()
                 live.update_betslips_live()
-            except Exception as e: tg.notify_admin(f"[live] {e}")
-            time.sleep(40)
+            except Exception as e:
+                from .repo import log_error
+                log_error("live", str(e))
+            time.sleep(cfg.LIVE_POLL_SECONDS)
 
-    def loop_commands():
-        try: cmd.run_forever()
-        except Exception as e: tg.notify_admin(f"[commands] {e}")
+    def loop_sender():
+        while True:
+            try:
+                process_due_messages(tg, api, cfg)
+            except Exception as e:
+                from .repo import log_error
+                log_error("sender", str(e))
+            time.sleep(20)
 
-    threading.Thread(target=loop_autopilot, daemon=True).start()
-    threading.Thread(target=loop_live, daemon=True).start()
-    threading.Thread(target=loop_commands, daemon=True).start()
+    th1 = threading.Thread(target=loop_autopilot, daemon=True)
+    th2 = threading.Thread(target=loop_live, daemon=True)
+    th3 = threading.Thread(target=loop_sender, daemon=True)
+    th1.start(); th2.start(); th3.start()
+
+    print("AI Pro Tips running. Ctrl+C per uscire.")
     tg.notify_admin("AI Pro Tips avviato.")
-    while True: time.sleep(3600)
+
+    while True:
+        time.sleep(3600)
 
 if __name__ == "__main__":
     main()
