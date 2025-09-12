@@ -28,10 +28,22 @@ class APIFootball:
             raise RuntimeError(f"API-Football error {r.status_code}: {r.text}")
         return r.json()
 
+    # -------- Odds per data (Bet365) --------
     def odds_by_date_bet365(self, date: str) -> List[Dict]:
         js = self._get("/odds", {"date": date, "bookmaker": BET365_ID})
         return js.get("response", []) or []
 
+    # -------- Fixtures per data --------
+    def fixtures_by_date(self, date: str) -> List[Dict]:
+        js = self._get("/fixtures", {"date": date})
+        return js.get("response", []) or []
+
+    # -------- Odds per fixture (Bet365) --------
+    def odds_by_fixture_bet365(self, fixture_id: int) -> List[Dict]:
+        js = self._get("/odds", {"fixture": fixture_id, "bookmaker": BET365_ID})
+        return js.get("response", []) or []
+
+    # -------- Helpers parsing --------
     @staticmethod
     def _put(out: Dict[str, float], key: str, val):
         if val is None: return
@@ -84,9 +96,23 @@ class APIFootball:
                     elif lab in ("under2.5","u2.5"): APIFootball._put(out, "Under 2.5", odd)
                     elif lab in ("under3.5","u3.5"): APIFootball._put(out, "Under 3.5", odd)
 
+        # Solo i mercati richiesti
         return {k: out[k] for k in REQUIRED_MARKETS if k in out}
 
     def parse_odds_entries(self, entries: List[Dict]) -> List[Dict]:
+        """
+        Converte la risposta /odds?date=... in una lista uniforme:
+        [{
+          "fixture_id": int,
+          "kickoff_iso": str,
+          "league_country": str,
+          "league_name": str,
+          "home": str,
+          "away": str,
+          "markets": {...},
+          "last_update": "HH:MM"
+        }, ...]
+        """
         out = []
         for e in entries:
             fixture = e.get("fixture", {}) or {}
@@ -118,8 +144,68 @@ class APIFootball:
             out.append({
                 "fixture_id": fid,
                 "kickoff_iso": kickoff_iso,
-                "league_country": league.get("country","") or "",
-                "league_name": league.get("name","") or "",
+                "league_country": (league.get("country","") or ""),
+                "league_name": (league.get("name","") or ""),
+                "home": home,
+                "away": away,
+                "markets": markets,
+                "last_update": upd
+            })
+        return out
+
+    # -------- Fallback robusto via fixtures --------
+    def entries_by_date_bet365(self, date: str) -> List[Dict]:
+        """
+        Prova /odds?date=... (Bet365); se vuoto, fallback:
+        - /fixtures?date=...  -> per ogni fixture chiama /odds?fixture=...&bookmaker=8
+        - Assembla entries nel formato già usato da parse_odds_entries
+        """
+        odds_entries = self.odds_by_date_bet365(date)
+        if odds_entries:
+            return self.parse_odds_entries(odds_entries)
+
+        # fallback via fixtures
+        fixtures = self.fixtures_by_date(date)
+        out = []
+        for fx in fixtures:
+            fid = int((fx.get("fixture", {}) or {}).get("id") or 0)
+            league = fx.get("league", {}) or {}
+            teams = fx.get("teams", {}) or {}
+            home = (teams.get("home", {}) or {}).get("name", "Home")
+            away = (teams.get("away", {}) or {}).get("name", "Away")
+            kickoff_iso = (fx.get("fixture", {}) or {}).get("date") or ""
+
+            oresp = self.odds_by_fixture_bet365(fid)
+            if not oresp:
+                continue
+            # oresp è come odds_by_fixture → parse come parse_odds_entries
+            bookmakers = []
+            for e in oresp:
+                for bm in e.get("bookmakers", []) or []:
+                    # basta il primo; è già Bet365
+                    bookmakers = [bm]; break
+                if bookmakers:
+                    break
+            if not bookmakers:
+                continue
+            markets = self._parse_market_block(bookmakers[0].get("bets", []) or [])
+            if not markets:
+                continue
+
+            lu = bookmakers[0].get("lastUpdate")
+            upd = ""
+            if lu:
+                try:
+                    ts = duparser.isoparse(lu)
+                    upd = ts.astimezone(timezone.utc).strftime("%H:%M")
+                except Exception:
+                    upd = ""
+
+            out.append({
+                "fixture_id": fid,
+                "kickoff_iso": kickoff_iso,
+                "league_country": (league.get("country","") or ""),
+                "league_name": (league.get("name","") or ""),
                 "home": home,
                 "away": away,
                 "markets": markets,
