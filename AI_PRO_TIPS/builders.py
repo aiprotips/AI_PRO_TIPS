@@ -30,9 +30,9 @@ def _format_kickoff_local(iso_dt: str, tz: str) -> str:
     except Exception:
         return "n/d"
 
-def _parse_bet365_markets(api: APIFootball, fixture_id: int) -> dict:
+def _parse_bet365_markets_allow_stale(api: APIFootball, fixture_id: int) -> dict:
     odds_resp = api.odds_by_fixture(fixture_id)
-    return api.parse_markets_bet365(odds_resp)
+    return api.parse_markets_bet365_allow_stale(odds_resp)  # <--- usa allow_stale per PLANNER
 
 _PREFERRED_ORDER = (
     "1X", "X2", "12",
@@ -63,7 +63,7 @@ def fixtures_allowed_today(api: APIFootball, date: str, cfg: Config):
 
 def _pick_market_in_range(api: APIFootball, fx: dict, lo: float, hi: float) -> dict:
     fid = int((fx.get("fixture", {}) or {}).get("id") or 0)
-    mk = _parse_bet365_markets(api, fid)
+    mk = _parse_bet365_markets_allow_stale(api, fid)  # <--- allow stale qui
     if not mk:
         return {}
     for m in _PREFERRED_ORDER:
