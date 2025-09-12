@@ -32,7 +32,8 @@ class APIFootball:
         return arr[0] if arr else None
 
     def odds_by_fixture(self, fixture_id: int) -> List[Dict]:
-        js = self._get("/odds", {"fixture": fixture_id})
+        # MODIFICA: limita direttamente l’endpoint al bookmaker Bet365 (ID 8)
+        js = self._get("/odds", {"fixture": fixture_id, "bookmaker": 8})
         return js.get("response", [])
 
     def bet365_markets(self, odds_resp: List[Dict]) -> List[Dict]:
@@ -47,10 +48,17 @@ class APIFootball:
     def parse_markets_bet365(self, odds_resp: List[Dict]) -> Dict[str, float]:
         out: Dict[str, float] = {}
         def put(k: str, v):
-            if v is None: return
-            try: x = float(v)
-            except: return
-            if k not in out or x < out[k]: out[k] = x
+            # MODIFICA: scarta mercati sospesi/non giocabili (es. 1.00)
+            if v is None:
+                return
+            try:
+                x = float(v)
+            except:
+                return
+            if x <= 1.05:
+                return
+            if k not in out or x < out[k]:
+                out[k] = x
 
         for bm in self.bet365_markets(odds_resp):
             for bet in bm.get("bets", []):
