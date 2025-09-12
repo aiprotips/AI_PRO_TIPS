@@ -32,7 +32,7 @@ class APIFootball:
         return arr[0] if arr else None
 
     def odds_by_fixture(self, fixture_id: int) -> List[Dict]:
-        # Solo Bet365 (bookmaker id 8) per ridurre rumore e differenze.
+        # SOLO Bet365 (id bookmaker = 8)
         js = self._get("/odds", {"fixture": fixture_id, "bookmaker": 8})
         return js.get("response", [])
 
@@ -48,14 +48,13 @@ class APIFootball:
     def parse_markets_bet365(self, odds_resp: List[Dict]) -> Dict[str, float]:
         out: Dict[str, float] = {}
         def put(k: str, v):
-            # Scarta mercati sospesi/non giocabili (es. 1.00) e valori non numerici
             if v is None:
                 return
             try:
                 x = float(v)
             except:
                 return
-            if x <= 1.05:
+            if x <= 1.05:  # scarta mercati sospesi / placeholder
                 return
             if k not in out or x < out[k]:
                 out[k] = x
@@ -107,21 +106,3 @@ class APIFootball:
                         if "home - yes" in lab or lab.strip() == "home yes": put("Home to Score", odd)
                         elif "away - yes" in lab or lab.strip() == "away yes": put("Away to Score", odd)
         return out
-
-    # Stats helpers
-    def team_statistics(self, league_id: int, season: int, team_id: int) -> dict:
-        js = self._get("/teams/statistics", {"league": league_id, "season": season, "team": team_id})
-        return js.get("response", {}) or {}
-
-    def team_last_fixtures(self, team_id: int, last: int = 10, league_id: int = None, season: int = None) -> list:
-        params = {"team": team_id, "last": last}
-        if league_id: params["league"] = league_id
-        if season: params["season"] = season
-        js = self._get("/fixtures", params)
-        return js.get("response", []) or []
-
-    def head_to_head(self, home_id: int, away_id: int, last: int = 10, league_id: int = None) -> list:
-        params = {"h2h": f"{home_id}-{away_id}", "last": last}
-        if league_id: params["league"] = league_id
-        js = self._get("/fixtures/headtohead", params)
-        return js.get("response", []) or []
