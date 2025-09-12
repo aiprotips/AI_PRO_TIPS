@@ -9,6 +9,9 @@ class Config:
     APIFOOTBALL_KEY= os.getenv("APIFOOTBALL_KEY", "")
     TZ             = os.getenv("TZ", "Europe/Rome")
 
+    # --- Link del canale per CTA (serve a templates/sender/commands) ---
+    CHANNEL_LINK   = os.getenv("CHANNEL_LINK", "https://t.me/AIProTips")
+
     # --- Quiet hours ---
     QUIET_HOURS = (0, 8)  # (start_hour, end_hour)
 
@@ -50,6 +53,6 @@ class Config:
         ("brazil","serie a"), ("argentina","liga profesional"), ("usa","mls")
     }
 
-    # --- NUOVI default per i loop (mancavano) ---
-    AUTOPILOT_TICK_SECONDS = int(os.getenv("AUTOPILOT_TICK_SECONDS", "30"))  # ogni 30s controlla planner/coda
-    LIVE_POLL_SECONDS      = int(os.getenv("LIVE_POLL_SECONDS", "40"))       # ogni 40s loop live
+    # --- Frequenze loop ---
+    AUTOPILOT_TICK_SECONDS = int(os.getenv("AUTOPILOT_TICK_SECONDS", "30"))
+    LIVE_POLL_SECONDS      = int(os.getenv("LIVE_POLL_SECONDS", "40"))
