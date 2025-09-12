@@ -85,17 +85,57 @@ def _choose_market_from_bet365(api: APIFootball, fx: dict) -> dict:
         "kickoff_local": _format_kickoff_local(start_time, api.tz)
     }
 
+# --- NUOVO: scelta di un mercato SOLO se la quota reale è entro il range richiesto ---
+def _pick_market_in_range(api: APIFootball, fx: dict, lo: float, hi: float) -> dict:
+    """
+    Ritorna un dict standardizzato (come _choose_market_from_bet365) ma
+    SOLO se trova un mercato Bet365 con quota reale dentro [lo, hi].
+    Altrimenti {}.
+    """
+    fid = int((fx.get("fixture", {}) or {}).get("id") or 0)
+    mk = _parse_bet365_markets(api, fid)
+    if not mk:
+        return {}
+
+    # Cerca in ordine di priorità mercati la cui quota è nel range
+    for m in _PREFERRED_ORDER:
+        if m in mk:
+            try:
+                odd = float(mk[m])
+            except Exception:
+                continue
+            if lo <= odd <= hi:
+                teams = fx.get("teams", {}) or {}
+                home = teams.get("home", {}).get("name", "Home")
+                away = teams.get("away", {}).get("name", "Away")
+                league_id = int((fx.get("league", {}) or {}).get("id") or 0)
+                start_time = (fx.get("fixture", {}) or {}).get("date")
+                return {
+                    "fixture_id": fid,
+                    "league_id": league_id,
+                    "home": home,
+                    "away": away,
+                    "market": m,
+                    "pick": m,
+                    "odds": odd,
+                    "start_time": start_time,
+                    "kickoff_local": _format_kickoff_local(start_time, api.tz)
+                }
+
+    # Nessun mercato nel range
+    return {}
+
 def build_value_single(api: APIFootball, date: str, cfg: Config, used_fixtures: set) -> dict:
     fixtures = fixtures_allowed_today(api, date, cfg)
     random.shuffle(fixtures)
     for fx in fixtures:
         fid = int((fx.get("fixture", {}) or {}).get("id") or 0)
         if fid in used_fixtures: continue
-        sel = _choose_market_from_bet365(api, fx)
+        # SOLO quote reali tra 1.50 e 1.80
+        sel = _pick_market_in_range(api, fx, 1.50, 1.80)
         if not sel: continue
-        if 1.50 <= sel["odds"] <= 1.80:
-            used_fixtures.add(fid)
-            return sel
+        used_fixtures.add(fid)
+        return sel
     return {}
 
 def build_combo_with_range(api: APIFootball, date: str, legs: int, lo: float, hi: float, cfg: Config, used_fixtures: set):
@@ -106,10 +146,10 @@ def build_combo_with_range(api: APIFootball, date: str, legs: int, lo: float, hi
         if len(out) >= legs: break
         fid = int((fx.get("fixture", {}) or {}).get("id") or 0)
         if fid in used_fixtures or fid in tried: continue
-        sel = _choose_market_from_bet365(api, fx)
+        # SOLO quote reali nel range [lo, hi]
+        sel = _pick_market_in_range(api, fx, lo, hi)
         if not sel: tried.add(fid); continue
-        if lo <= sel["odds"] <= hi:
-            used_fixtures.add(fid); out.append(sel)
+        used_fixtures.add(fid); out.append(sel)
     if len(out) < legs:
         if len(out) >= 2: return out
         return []
