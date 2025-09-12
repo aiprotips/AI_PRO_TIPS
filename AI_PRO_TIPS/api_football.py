@@ -32,7 +32,7 @@ class APIFootball:
         return arr[0] if arr else None
 
     def odds_by_fixture(self, fixture_id: int) -> List[Dict]:
-        # MODIFICA: limita direttamente l’endpoint al bookmaker Bet365 (ID 8)
+        # Solo Bet365 (bookmaker id 8) per ridurre rumore e differenze.
         js = self._get("/odds", {"fixture": fixture_id, "bookmaker": 8})
         return js.get("response", [])
 
@@ -48,7 +48,7 @@ class APIFootball:
     def parse_markets_bet365(self, odds_resp: List[Dict]) -> Dict[str, float]:
         out: Dict[str, float] = {}
         def put(k: str, v):
-            # MODIFICA: scarta mercati sospesi/non giocabili (es. 1.00)
+            # Scarta mercati sospesi/non giocabili (es. 1.00) e valori non numerici
             if v is None:
                 return
             try:
@@ -91,7 +91,6 @@ class APIFootball:
                         lab = (v.get("value","") or "").lower().replace(" ",""); odd = v.get("odd")
                         if lab in ("under3.5","u3.5"): put("Under 3.5", odd)
                         elif lab in ("over0.5","o0.5"): put("Over 0.5", odd)
-                        # >>> AGGIUNTA RICHIESTA (già presente) <<<
                         elif lab in ("over1.5","o1.5"): put("Over 1.5", odd)
                         elif lab in ("over2.5","o2.5"): put("Over 2.5", odd)
                         elif lab in ("under2.5","u2.5"): put("Under 2.5", odd)
@@ -99,8 +98,8 @@ class APIFootball:
                 elif "both teams to score" in name or "goal/no goal" in name:
                     for v in vals:
                         lab = (v.get("value","") or "").lower(); odd = v.get("odd")
-                        if "yes" in lab: put("Gol", odd)      # <--- RINOMINATO da 'BTTS Yes'
-                        elif "no"  in lab: put("No Gol", odd)  # <--- RINOMINATO da 'BTTS No'
+                        if "yes" in lab: put("Gol", odd)      # BTTS Yes
+                        elif "no"  in lab: put("No Gol", odd)  # BTTS No
 
                 elif "team to score" in name:
                     for v in vals:
