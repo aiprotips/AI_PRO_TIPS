@@ -1,14 +1,16 @@
 from typing import Dict, Any
 import json, random
 from sqlalchemy import text
-from zoneinfo import ZoneInfo  # <-- aggiunto per conversione UTC -> locale
+from zoneinfo import ZoneInfo
+from datetime import datetime, timezone
 from .config import Config
 from .util import now_tz
 from .telegram_client import TelegramClient
 from .autopilot import Autopilot
 from .repo import kv_get, kv_set, schedule_get_today, schedule_get_by_short_id, schedule_cancel_by_short_id, schedule_cancel_all_today, schedule_enqueue, emit_count
 from .templates import render_value_single, render_multipla
-from .builders import fixtures_allowed_today, build_value_single, build_combo_with_range
+from .builders import fixtures_allowed_today, build_value_single, build_combo_with_range, calc_send_at_for_combo
+from .sender import _render_value_now, _render_combo_now  # usa renderer realtime per preview
 
 HELP_TEXT = (
     "🤖 <b>AI Pro Tips — Comandi</b>\n"
@@ -28,7 +30,8 @@ HELP_TEXT = (
     "/check_picks — pick del giorno & quote\n"
     "/leagues — whitelist attiva\n"
     "/dup — verifica duplicati\n"
-    "/where FIXTURE_ID — in quale schedina è finita"
+    "/where FIXTURE_ID — in quale schedina è finita\n"
+    "/debug_odds FIXTURE_ID — quote Bet365 raw"
 )
 
 class CommandsLoop:
@@ -72,7 +75,6 @@ class CommandsLoop:
 
         if low.startswith("/status"):
             sched = schedule_get_today(); q=[s for s in sched if s["status"]=="QUEUED"]; sent=[s for s in sched if s["status"]=="SENT"]
-            # converti orario da UTC a TZ locale per la preview
             if q:
                 send_utc = q[0]["send_at"].replace(tzinfo=ZoneInfo("UTC"))
                 nxt = send_utc.astimezone(ZoneInfo(self.cfg.TZ)).strftime("%H:%M")
@@ -80,25 +82,48 @@ class CommandsLoop:
                 nxt = "—"
             self._reply(chat_id, f"<b>Stato di oggi</b>\nIn coda: <b>{len(q)}</b>\nInviate: <b>{len(sent)}</b>\nProssimo invio: <b>{nxt}</b>"); return
 
-            # Preview
         if low.startswith("/preview"):
             parts = text_in.split()
             if len(parts)>=2 and parts[1].isdigit():
                 sid = parts[1]; rec = schedule_get_by_short_id(sid)
                 if not rec: self._reply(chat_id, "ID non trovato."); return
-                payload=rec["payload"]
-                # orario visualizzato in TZ locale (send_at è UTC in DB)
+                # render realtime se payload è JSON
+                payload = rec["payload"] or ""
+                text_preview = None
+                if isinstance(payload, str) and payload[:1] in ("{","["):
+                    data = json.loads(payload)
+                    kind = (rec.get("kind") or "").lower()
+                    if kind == "value":
+                        text_preview = _render_value_now(self.auto.api, self.cfg, data)
+                    elif kind == "combo":
+                        text_preview = _render_combo_now(self.auto.api, self.cfg, data)
+                if not text_preview:
+                    text_preview = payload
                 send_utc = rec["send_at"].replace(tzinfo=ZoneInfo("UTC"))
                 when = send_utc.astimezone(ZoneInfo(self.cfg.TZ)).strftime("%H:%M")
-                self._reply(chat_id, f"ID <b>{sid}</b> — invio: <b>{when}</b>\n\n{payload}"); return
+                self._reply(chat_id, f"ID <b>{sid}</b> — invio: <b>{when}</b>\n\n{text_preview}"); return
             else:
                 sched = schedule_get_today()
                 if not sched: self._reply(chat_id, "Nessuna schedina pianificata oggi."); return
                 out=[]
                 for r in sched:
+                    payload = r["payload"] or ""
+                    text_preview = None
+                    if isinstance(payload, str) and payload[:1] in ("{","["):
+                        try:
+                            data = json.loads(payload)
+                            kind = (r.get("kind") or "").lower()
+                            if kind == "value":
+                                text_preview = _render_value_now(self.auto.api, self.cfg, data)
+                            elif kind == "combo":
+                                text_preview = _render_combo_now(self.auto.api, self.cfg, data)
+                        except Exception:
+                            text_preview = payload
+                    else:
+                        text_preview = payload
                     send_utc = r["send_at"].replace(tzinfo=ZoneInfo("UTC"))
                     when = send_utc.astimezone(ZoneInfo(self.cfg.TZ)).strftime("%H:%M")
-                    out.append(f"ID <b>{r['short_id']}</b> — {r['status']} — invio: <b>{when}</b>\n\n{r['payload']}")
+                    out.append(f"ID <b>{r['short_id']}</b> — {r['status']} — invio: <b>{when}</b>\n\n{text_preview}")
                 self._reply(chat_id, "\n\n——————————\n\n".join(out)); return
 
         if low.startswith("/publish"):
@@ -106,7 +131,19 @@ class CommandsLoop:
             if len(parts)<2: self._reply(chat_id, "Uso: /publish ID"); return
             sid=parts[1].strip(); rec=schedule_get_by_short_id(sid)
             if not rec or rec["status"]!="QUEUED": self._reply(chat_id, "ID non trovato o non in coda."); return
-            self.tg.send_message(rec["payload"])
+            # forza render realtime
+            payload = rec["payload"] or ""
+            text_to_send = payload
+            if isinstance(payload, str) and payload[:1] in ("{","["):
+                data = json.loads(payload)
+                kind = (rec.get("kind") or "").lower()
+                if kind == "value":
+                    text_to_send = _render_value_now(self.auto.api, self.cfg, data)
+                elif kind == "combo":
+                    text_to_send = _render_combo_now(self.auto.api, self.cfg, data)
+            if not text_to_send:
+                self._reply(chat_id, "Quote non disponibili ora, riprova tra poco."); return
+            self.tg.send_message(text_to_send)
             from .repo import schedule_mark_sent; schedule_mark_sent(rec["id"])
             self._reply(chat_id, f"✅ Pubblicata {sid}."); return
 
@@ -140,27 +177,38 @@ class CommandsLoop:
 
         if low.startswith("/gen"):
             parts=text_in.split()
+            # DRY preview: render con quote attuali
             if "--dry" in parts:
                 today=now_tz(self.cfg.TZ).strftime("%Y-%m-%d"); used=set(); previews=[]
+                # 2 value
                 for _ in range(self.cfg.DAILY_PLAN["value_singles"]):
                     sgl=build_value_single(self.auto.api, today, self.cfg, used)
-                    if sgl: previews.append(render_value_single(sgl["home"], sgl["away"], sgl["market"], float(sgl["odds"]), sgl["kickoff_local"], "https://t.me/AIProTips"))
+                    if sgl:
+                        payload={"type":"value","selection":sgl}
+                        text_preview = _render_value_now(self.auto.api, self.cfg, payload)
+                        if text_preview: previews.append(text_preview)
+                # combos
                 for conf in self.cfg.DAILY_PLAN["combos"]:
                     legs=conf["legs"]; 
                     if isinstance(legs,str) and legs=="8-12": legs = random.randint(8,12)
                     cmb=build_combo_with_range(self.auto.api, today, legs, float(conf["leg_lo"]), float(conf["leg_hi"]), self.cfg, used)
                     if cmb:
-                        total=1.0; block=[]
-                        for c in cmb: total*=float(c["odds"]); block.append({"home":c["home"],"away":c["away"],"pick":c["market"],"odds":float(c["odds"])})
-                        previews.append(render_multipla(block, float(total), cmb[0]["kickoff_local"], "https://t.me/AIProTips"))
+                        payload={"type":"combo","selections":cmb}
+                        text_preview = _render_combo_now(self.auto.api, self.cfg, payload)
+                        if text_preview: previews.append(text_preview)
                 self._reply(chat_id, "<b>Anteprima (dry)</b>\n\n"+("\n\n——————————\n\n".join(previews) if previews else "Niente da generare.")); return
+
+            # /gen value -> accoda JSON e calcola T-3h
             if len(parts)>=2 and parts[1]=="value":
                 today=now_tz(self.cfg.TZ).strftime("%Y-%m-%d"); used=set(); sgl=build_value_single(self.auto.api, today, self.cfg, used)
                 if not sgl: self._reply(chat_id, "Nessuna singola disponibile."); return
-                from datetime import datetime
                 sid="V"+str(random.randint(10000,99999))[1:]
-                schedule_enqueue(sid, "value", render_value_single(sgl["home"], sgl["away"], sgl["market"], float(sgl["odds"]), sgl["kickoff_local"], "https://t.me/AIProTips"), datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
-                self._reply(chat_id, f"Accodata singola (ID {sid})."); return
+                send_at_utc = calc_send_at_for_combo([sgl], self.cfg.TZ).strftime("%Y-%m-%d %H:%M:%S")
+                payload_json = json.dumps({"type":"value","selection":sgl}, ensure_ascii=False)
+                schedule_enqueue(sid, "value", payload_json, send_at_utc)
+                self._reply(chat_id, f"Accodata singola (ID {sid}) — invio alle {now_tz(self.cfg.TZ).astimezone(ZoneInfo(self.cfg.TZ)).strftime('%H:%M') if False else send_at_utc} UTC."); return
+
+            # /gen combo N
             if len(parts)>=3 and parts[1]=="combo":
                 try: n=int(parts[2])
                 except: self._reply(chat_id, "Uso: /gen combo N  (N=2,3,4,5,8..12)"); return
@@ -168,12 +216,13 @@ class CommandsLoop:
                 lo,hi = (1.30,1.50) if n==2 else ((1.10,1.36) if n>=8 else (1.20,1.50))
                 cmb=build_combo_with_range(self.auto.api, today, n, lo, hi, self.cfg, used)
                 if not cmb: self._reply(chat_id, "Nessuna multipla disponibile."); return
-                total=1.0; block=[]
-                for c in cmb: total*=float(c["odds"]); block.append({"home":c["home"],"away":c["away"],"pick":c["market"],"odds":float(c["odds"])})
-                from datetime import datetime
                 sid="C"+str(random.randint(10000,99999))[1:]
-                schedule_enqueue(sid, "combo", render_multipla(block, float(total), cmb[0]["kickoff_local"], "https://t.me/AIProTips"), datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
+                send_at_utc = calc_send_at_for_combo(cmb, self.cfg.TZ).strftime("%Y-%m-%d %H:%M:%S")
+                payload_json = json.dumps({"type":"combo","selections":cmb}, ensure_ascii=False)
+                schedule_enqueue(sid, "combo", payload_json, send_at_utc)
                 self._reply(chat_id, f"Accodata multipla x{n} (ID {sid})."); return
+
+            # default: rigenera planner
             kv_set(self.auto._planned_key(), ""); self.auto.run_daily_planner(force=True); self._reply(chat_id, "🔧 Pianificazione giornaliera rigenerata."); return
 
         if low.startswith("/check_today"):
@@ -187,6 +236,7 @@ class CommandsLoop:
             self._reply(chat_id, "<b>Match whitelisted</b>\n"+ "\n".join(out)); return
 
         if low.startswith("/check_picks"):
+            # invariato: pool interno di coerenza
             try: arr=json.loads(kv_get(self.auto._picks_key()) or "[]")
             except Exception: arr=[]
             if not arr: self._reply(chat_id, "Nessun pick nel pool di oggi."); return
@@ -209,27 +259,21 @@ class CommandsLoop:
             parts=text_in.split()
             if len(parts)<2: self._reply(chat_id, "Uso: /where FIXTURE_ID"); return
             fxid=parts[1].strip(); self._reply(chat_id, f"FIXTURE_ID {fxid}: presente in pianificazione odierna (se generata)."); return
-                    # /debug_odds FIXTURE_ID  -> stampa la mappa quote Bet365 reali per quella partita
+
         if low.startswith("/debug_odds"):
             parts = text_in.split()
             if len(parts) < 2:
-                self._reply(chat_id, "Uso: /debug_odds FIXTURE_ID")
-                return
+                self._reply(chat_id, "Uso: /debug_odds FIXTURE_ID"); return
             try:
                 fid = int(parts[1])
             except:
-                self._reply(chat_id, "FIXTURE_ID non valido")
-                return
+                self._reply(chat_id, "FIXTURE_ID non valido"); return
             try:
                 mk = self.auto.api.parse_markets_bet365(self.auto.api.odds_by_fixture(fid))
-                # mostro solo i mercati che usiamo
                 keys_order = ("1","X","2","1X","X2","12","DNB Home","DNB Away",
-                              "Under 3.5","Over 0.5","Over 1.5","Over 2.5","Under 2.5",
+                              "Under 3.5","Under 2.5","Over 0.5","Over 1.5","Over 2.5",
                               "Home to Score","Away to Score","Gol","No Gol")
-                lines = []
-                for k in keys_order:
-                    if k in mk:
-                        lines.append(f"{k}: {mk[k]}")
+                lines = [f"{k}: {mk[k]}" for k in keys_order if k in mk]
                 if not lines:
                     lines = [f"(Nessun mercato Bet365 trovato per {fid})"]
                 self._reply(chat_id, "<b>Bet365 (fixture "+str(fid)+")</b>\n" + "\n".join(lines))
