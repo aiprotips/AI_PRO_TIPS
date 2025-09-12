@@ -61,31 +61,6 @@ def fixtures_allowed_today(api: APIFootball, date: str, cfg: Config):
         out.append(fx)
     return out
 
-def _choose_market_from_bet365(api: APIFootball, fx: dict) -> dict:
-    fid = int((fx.get("fixture", {}) or {}).get("id") or 0)
-    mk = _parse_bet365_markets(api, fid)
-    if not mk: return {}
-    candidates = [(m, float(mk[m])) for m in _PREFERRED_ORDER if m in mk]
-    if not candidates: return {}
-    random.shuffle(candidates)
-    market, odds = min(candidates, key=lambda t: abs(t[1] - 1.40))
-    teams = fx.get("teams", {}) or {}
-    home = teams.get("home", {}).get("name", "Home")
-    away = teams.get("away", {}).get("name", "Away")
-    league_id = int((fx.get("league", {}) or {}).get("id") or 0)
-    start_time = (fx.get("fixture", {}) or {}).get("date")
-    return {
-        "fixture_id": fid,
-        "league_id": league_id,
-        "home": home,
-        "away": away,
-        "market": market,
-        "pick": market,
-        "odds": float(odds),
-        "start_time": start_time,
-        "kickoff_local": _format_kickoff_local(start_time, api.tz)
-    }
-
 def _pick_market_in_range(api: APIFootball, fx: dict, lo: float, hi: float) -> dict:
     fid = int((fx.get("fixture", {}) or {}).get("id") or 0)
     mk = _parse_bet365_markets(api, fid)
@@ -98,7 +73,7 @@ def _pick_market_in_range(api: APIFootball, fx: dict, lo: float, hi: float) -> d
             except Exception:
                 continue
             if lo <= odd <= hi:
-                teams = fx.get("teams", {}) or {}
+                teams = (fx.get("teams", {}) or {})
                 home = teams.get("home", {}).get("name", "Home")
                 away = teams.get("away", {}).get("name", "Away")
                 league_id = int((fx.get("league", {}) or {}).get("id") or 0)
@@ -121,9 +96,11 @@ def build_value_single(api: APIFootball, date: str, cfg: Config, used_fixtures: 
     random.shuffle(fixtures)
     for fx in fixtures:
         fid = int((fx.get("fixture", {}) or {}).get("id") or 0)
-        if fid in used_fixtures: continue
+        if fid in used_fixtures:
+            continue
         sel = _pick_market_in_range(api, fx, 1.50, 1.80)
-        if not sel: continue
+        if not sel:
+            continue
         used_fixtures.add(fid)
         return sel
     return {}
@@ -133,24 +110,30 @@ def build_combo_with_range(api: APIFootball, date: str, legs: int, lo: float, hi
     fixtures.sort(key=lambda f: (f.get("fixture", {}) or {}).get("date"))
     out = []; tried=set()
     for fx in fixtures:
-        if len(out) >= legs: break
+        if len(out) >= legs:
+            break
         fid = int((fx.get("fixture", {}) or {}).get("id") or 0)
-        if fid in used_fixtures or fid in tried: continue
+        if fid in used_fixtures or fid in tried:
+            continue
         sel = _pick_market_in_range(api, fx, lo, hi)
-        if not sel: tried.add(fid); continue
+        if not sel:
+            tried.add(fid); continue
         used_fixtures.add(fid); out.append(sel)
     if len(out) < legs:
-        if len(out) >= 2: return out
+        if len(out) >= 2:
+            return out
         return []
     return out
 
 def calc_send_at_for_combo(combo: list, tz: str):
     from dateutil import parser as duparser
-    if not combo: return None
+    if not combo:
+        return None
     min_iso = min(c["start_time"] for c in combo)
     dt_aware = duparser.isoparse(min_iso)
     local = dt_aware.astimezone(ZoneInfo(tz))
     send_local = local - timedelta(hours=3)
     clamp = local.replace(hour=8, minute=0, second=0, microsecond=0)
-    if send_local.hour < 8: send_local = clamp
+    if send_local.hour < 8:
+        send_local = clamp
     return send_local.astimezone(ZoneInfo("UTC"))
