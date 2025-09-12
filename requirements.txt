@@ -1,4 +1,4 @@
-# HTTP client per API-Football
+# HTTP client per API-Footbal
 requests==2.31.0
 
 # Parsing date/time dalle API
