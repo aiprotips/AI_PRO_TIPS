@@ -23,7 +23,6 @@ def create_betslip(code: str, total_odds: float, legs_count: int, short_id: str)
             VALUES (:c, :sid, :o, :l, 'OPEN', NOW())
         """), {"c": code, "sid": short_id, "o": total_odds, "l": legs_count})
         s.commit()
-        # RECUPERO ROBUSTO DELL'ID via chiave unica 'code' (evita LAST_INSERT_ID()=0)
         row = s.execute(text("SELECT id FROM betslips WHERE code=:c"), {"c": code}).fetchone()
         if not row:
             raise RuntimeError("create_betslip: insert non trovato tramite 'code'.")
@@ -31,7 +30,6 @@ def create_betslip(code: str, total_odds: float, legs_count: int, short_id: str)
 
 def add_selection(betslip_id: int, fixture_id: int, league_id: int, start_iso: str,
                   home: str, away: str, market: str, pick: str, odds: float):
-    # Normalizza 'YYYY-MM-DDTHH:MM:SS' -> 'YYYY-MM-DD HH:MM:SS' (MySQL DATETIME)
     st_norm = (start_iso or "").replace("T", " ")[:19]
     with get_session() as s:
         s.execute(text("""
@@ -118,6 +116,12 @@ def schedule_due_now(limit: int = 10):
 def schedule_mark_sent(rec_id: int):
     with get_session() as s:
         s.execute(text("UPDATE scheduled_messages SET status='SENT', sent_at=NOW() WHERE id=:i"), {"i": rec_id})
+        s.commit()
+
+def schedule_reschedule(rec_id: int, new_send_at_iso: str):
+    with get_session() as s:
+        s.execute(text("UPDATE scheduled_messages SET send_at=:sa WHERE id=:i AND status='QUEUED'"),
+                  {"sa": new_send_at_iso, "i": rec_id})
         s.commit()
 
 def schedule_cancel_by_short_id(short_id: str) -> int:
