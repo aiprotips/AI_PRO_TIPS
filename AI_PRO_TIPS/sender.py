@@ -94,7 +94,7 @@ def process_due_messages(tg: TelegramClient, api: APIFootball, cfg: Config):
                         log_error("sender", f"resched fail id={rec_id}: {e}")
                     continue
         else:
-            # payload pre-formattato vecchio stile
+            # payload pre-formattato vecchio stil
             text_to_send = payload
 
         try:
