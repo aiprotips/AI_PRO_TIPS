@@ -1,6 +1,6 @@
 from sqlalchemy import text
 from .db import get_session
-#l
+
 def kv_get(key: str):
     with get_session() as s:
         row = s.execute(text("SELECT val FROM config_kv WHERE k=:k"), {"k": key}).fetchone()
@@ -133,6 +133,16 @@ def schedule_cancel_all_today() -> int:
     with get_session() as s:
         res = s.execute(text("UPDATE scheduled_messages SET status='CANCELLED' WHERE status='QUEUED' AND DATE(send_at)=CURDATE()"))
         s.commit(); return res.rowcount
+
+def schedule_delete_all_today() -> int:
+    """
+    Cancella fisicamente dalla tabella scheduled_messages tutte le righe di OGGI,
+    inclusi i record già inviati (SENT) o cancellati (CANCELLED).
+    """
+    with get_session() as s:
+        res = s.execute(text("DELETE FROM scheduled_messages WHERE DATE(send_at)=CURDATE()"))
+        s.commit()
+        return res.rowcount
 
 def schedule_get_today():
     with get_session() as s:
