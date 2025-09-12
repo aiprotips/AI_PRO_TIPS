@@ -83,7 +83,7 @@ class APIFootball:
                         lab = (v.get("value","") or "").lower().replace(" ",""); odd = v.get("odd")
                         if lab in ("under3.5","u3.5"): put("Under 3.5", odd)
                         elif lab in ("over0.5","o0.5"): put("Over 0.5", odd)
-                        # >>> AGGIUNTA RICHIESTA <<<
+                        # >>> AGGIUNTA RICHIESTA (già presente) <<<
                         elif lab in ("over1.5","o1.5"): put("Over 1.5", odd)
                         elif lab in ("over2.5","o2.5"): put("Over 2.5", odd)
                         elif lab in ("under2.5","u2.5"): put("Under 2.5", odd)
@@ -91,8 +91,8 @@ class APIFootball:
                 elif "both teams to score" in name or "goal/no goal" in name:
                     for v in vals:
                         lab = (v.get("value","") or "").lower(); odd = v.get("odd")
-                        if "yes" in lab: put("BTTS Yes", odd)
-                        elif "no" in lab: put("BTTS No", odd)
+                        if "yes" in lab: put("Gol", odd)      # <--- RINOMINATO da 'BTTS Yes'
+                        elif "no"  in lab: put("No Gol", odd)  # <--- RINOMINATO da 'BTTS No'
 
                 elif "team to score" in name:
                     for v in vals:
