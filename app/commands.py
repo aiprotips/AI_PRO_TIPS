@@ -28,25 +28,20 @@ def _format_markets(mk: Dict[str, float]) -> List[str]:
     lines = []
     r1 = [f"{k}: {mk[k]}" for k in ("1","X","2") if k in mk]
     if r1: lines.append(" | ".join(r1))
-
     r2 = [f"{k}: {mk[k]}" for k in ("1X","12","X2") if k in mk]
     if r2: lines.append(" | ".join(r2))
-
     r3 = [f"{k.replace(' ', '')}: {mk[k]}" for k in ("Over 0.5","Over 1.5","Over 2.5") if k in mk]
     if r3: lines.append(" | ".join(r3))
-
     r4 = [f"{k.replace(' ', '')}: {mk[k]}" for k in ("Under 2.5","Under 3.5") if k in mk]
     if r4: lines.append(" | ".join(r4))
-
     r5 = [f"{k}: {mk[k]}" for k in ("Gol","No Gol") if k in mk]
     if r5: lines.append(" | ".join(r5))
-
     return lines
 
 def _render_day(api: APIFootball, cfg: Config, date_str: str) -> List[str]:
-    entries = api.odds_by_date_bet365(date_str)
-    parsed = api.parse_odds_entries(entries)
-    parsed = [p for p in parsed if allowed_league(p["league_country"], p["league_name"])]
+    # usa l’API con fallback: odds per data, altrimenti fixtures -> odds per fixture
+    entries = api.entries_by_date_bet365(date_str)
+    parsed = [p for p in entries if allowed_league(p["league_country"], p["league_name"])]
     if not parsed:
         return [f"<b>{date_str}</b> — Nessuna quota Bet365 disponibile per i campionati whitelisted."]
 
@@ -76,15 +71,14 @@ class CommandsLoop:
         return int(user_id) == int(self.cfg.ADMIN_ID)
 
     def _send_paginated(self, chat_id: int, blocks: List[str]):
-        page = []
-        page_len = 0
+        page = []; total_len = 0
         for b in blocks:
-            if page_len + len(b) + 2 > self.cfg.PAGE_SIZE:
+            if total_len + len(b) + 2 > self.cfg.PAGE_SIZE:
                 if page:
                     self.tg.send_message(chat_id, "\n\n".join(page))
-                page = [b]; page_len = len(b) + 2
+                page = [b]; total_len = len(b) + 2
             else:
-                page.append(b); page_len += len(b) + 2
+                page.append(b); total_len += len(b) + 2
         if page:
             self.tg.send_message(chat_id, "\n\n".join(page))
 
@@ -92,6 +86,7 @@ class CommandsLoop:
         now = datetime.now(ZoneInfo(self.cfg.TZ)).date()
         today = now.strftime("%Y-%m-%d")
         tomorrow = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+
         if mode == "today":
             blocks = _render_day(self.api, self.cfg, today)
             self._send_paginated(chat_id, [f"<b>OGGI {today}</b>"] + blocks)
@@ -107,17 +102,14 @@ class CommandsLoop:
         msg = upd.get("message") or upd.get("edited_message")
         if not msg:
             return
-        chat = msg.get("chat", {}) or {}
-        chat_id = chat.get("id")
-        user = msg.get("from", {}) or {}
-        user_id = user.get("id")
+        chat_id = (msg.get("chat") or {}).get("id")
+        user_id = (msg.get("from") or {}).get("id")
         text = (msg.get("text") or "").strip()
         if not text or not chat_id:
             return
 
         if not self._is_admin(user_id):
-            self.tg.send_message(chat_id, "❌ Non autorizzato.")
-            return
+            self.tg.send_message(chat_id, "❌ Non autorizzato."); return
 
         low = text.lower()
         if low.startswith("/start"):
