@@ -40,7 +40,7 @@ _PREFERRED_ORDER = (
     "DNB Home",
     "Home to Score", "Away to Score",
     "1", "2",
-    "BTTS Yes", "BTTS No"
+    "Gol", "No Gol"  # <-- rinominati da "BTTS Yes","BTTS No"
 )
 
 def fixtures_allowed_today(api: APIFootball, date: str, cfg: Config):
