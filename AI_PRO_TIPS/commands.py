@@ -1,6 +1,7 @@
 from typing import Dict, Any
 import json, random
 from sqlalchemy import text
+from zoneinfo import ZoneInfo  # <-- aggiunto per conversione UTC -> locale
 from .config import Config
 from .util import now_tz
 from .telegram_client import TelegramClient
@@ -71,7 +72,12 @@ class CommandsLoop:
 
         if low.startswith("/status"):
             sched = schedule_get_today(); q=[s for s in sched if s["status"]=="QUEUED"]; sent=[s for s in sched if s["status"]=="SENT"]
-            nxt = q[0]["send_at"].strftime("%H:%M") if q else "—"
+            # converti orario da UTC a TZ locale per la preview
+            if q:
+                send_utc = q[0]["send_at"].replace(tzinfo=ZoneInfo("UTC"))
+                nxt = send_utc.astimezone(ZoneInfo(self.cfg.TZ)).strftime("%H:%M")
+            else:
+                nxt = "—"
             self._reply(chat_id, f"<b>Stato di oggi</b>\nIn coda: <b>{len(q)}</b>\nInviate: <b>{len(sent)}</b>\nProssimo invio: <b>{nxt}</b>"); return
 
             # Preview
@@ -80,14 +86,18 @@ class CommandsLoop:
             if len(parts)>=2 and parts[1].isdigit():
                 sid = parts[1]; rec = schedule_get_by_short_id(sid)
                 if not rec: self._reply(chat_id, "ID non trovato."); return
-                payload=rec["payload"]; when=rec["send_at"].strftime("%H:%M")
+                payload=rec["payload"]
+                # orario visualizzato in TZ locale (send_at è UTC in DB)
+                send_utc = rec["send_at"].replace(tzinfo=ZoneInfo("UTC"))
+                when = send_utc.astimezone(ZoneInfo(self.cfg.TZ)).strftime("%H:%M")
                 self._reply(chat_id, f"ID <b>{sid}</b> — invio: <b>{when}</b>\n\n{payload}"); return
             else:
                 sched = schedule_get_today()
                 if not sched: self._reply(chat_id, "Nessuna schedina pianificata oggi."); return
                 out=[]
                 for r in sched:
-                    when=r["send_at"].strftime("%H:%M")
+                    send_utc = r["send_at"].replace(tzinfo=ZoneInfo("UTC"))
+                    when = send_utc.astimezone(ZoneInfo(self.cfg.TZ)).strftime("%H:%M")
                     out.append(f"ID <b>{r['short_id']}</b> — {r['status']} — invio: <b>{when}</b>\n\n{r['payload']}")
                 self._reply(chat_id, "\n\n——————————\n\n".join(out)); return
 
