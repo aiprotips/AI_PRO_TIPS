@@ -23,17 +23,22 @@ def create_betslip(code: str, total_odds: float, legs_count: int, short_id: str)
             VALUES (:c, :sid, :o, :l, 'OPEN', NOW())
         """), {"c": code, "sid": short_id, "o": total_odds, "l": legs_count})
         s.commit()
-        row = s.execute(text("SELECT LAST_INSERT_ID()")).fetchone()
+        # RECUPERO ROBUSTO DELL'ID via chiave unica 'code' (evita LAST_INSERT_ID()=0)
+        row = s.execute(text("SELECT id FROM betslips WHERE code=:c"), {"c": code}).fetchone()
+        if not row:
+            raise RuntimeError("create_betslip: insert non trovato tramite 'code'.")
         return int(row[0])
 
 def add_selection(betslip_id: int, fixture_id: int, league_id: int, start_iso: str,
                   home: str, away: str, market: str, pick: str, odds: float):
+    # Normalizza 'YYYY-MM-DDTHH:MM:SS' -> 'YYYY-MM-DD HH:MM:SS' (MySQL DATETIME)
+    st_norm = (start_iso or "").replace("T", " ")[:19]
     with get_session() as s:
         s.execute(text("""
             INSERT INTO selections (betslip_id, fixture_id, league_id, start_time, home, away, market, pick, odds, result)
             VALUES (:bid, :fid, :lid, :st, :h, :a, :m, :p, :o, 'PENDING')
         """), {
-            "bid": betslip_id, "fid": fixture_id, "lid": league_id, "st": start_iso,
+            "bid": betslip_id, "fid": fixture_id, "lid": league_id, "st": st_norm,
             "h": home, "a": away, "m": market, "p": pick, "o": odds
         })
         s.commit()
