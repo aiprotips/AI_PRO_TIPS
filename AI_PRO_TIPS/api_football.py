@@ -1,11 +1,11 @@
 import requests
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 from dateutil import parser as duparser
 from datetime import datetime, timezone
 
 BET365_NAMES = {"bet365", "bet 365", "bet-365"}
 
-# minuti massimi di “staleness” accettata per i prezzi Bet365
+# minuti massimi accettati per i prezzi "freschi" (usati SOLO al momento dell'invio)
 MAX_STALENESS_MIN = 15
 
 class APIFootball:
@@ -41,40 +41,37 @@ class APIFootball:
         js = self._get("/odds", {"fixture": fixture_id, "bookmaker": 8})
         return js.get("response", [])
 
-    def _bet365_blocks_fresh(self, odds_resp: List[Dict]) -> List[Dict]:
-        """
-        Estrae SOLO i blocchi bookmaker=Bet365 con lastUpdate “fresco”.
-        Se lastUpdate manca, li consideriamo stali -> scartati.
-        """
+    # -------- helpers freschezza --------
+    def _bet365_blocks(self, odds_resp: List[Dict]) -> List[Dict]:
         out = []
-        now_utc = datetime.now(timezone.utc)
         for entry in odds_resp:
             for bm in entry.get("bookmakers", []):
                 name = (bm.get("name", "") or "").lower().strip()
-                if name not in BET365_NAMES:
-                    continue
-                last_upd = bm.get("lastUpdate")
-                if not last_upd:
-                    continue
-                try:
-                    ts = duparser.isoparse(last_upd)
-                    # normalizza a UTC se privo di tz
-                    if ts.tzinfo is None:
-                        ts = ts.replace(tzinfo=timezone.utc)
-                    age_min = (now_utc - ts.astimezone(timezone.utc)).total_seconds() / 60.0
-                except Exception:
-                    continue
-                if age_min <= MAX_STALENESS_MIN:
+                if name in BET365_NAMES:
                     out.append(bm)
         return out
 
-    def parse_markets_bet365(self, odds_resp: List[Dict]) -> Dict[str, float]:
-        """
-        Ritorna mappa mercato->odd (float) SOLO da Bet365, SOLO se lastUpdate è “fresco”.
-        Scarta mercati sospesi (odd <= 1.05).
-        """
-        out: Dict[str, float] = {}
+    def _bet365_blocks_fresh(self, odds_resp: List[Dict]) -> List[Dict]:
+        out = []
+        now_utc = datetime.now(timezone.utc)
+        for bm in self._bet365_blocks(odds_resp):
+            last_upd = bm.get("lastUpdate")
+            if not last_upd:
+                continue
+            try:
+                ts = duparser.isoparse(last_upd)
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                age_min = (now_utc - ts.astimezone(timezone.utc)).total_seconds() / 60.0
+            except Exception:
+                continue
+            if age_min <= MAX_STALENESS_MIN:
+                out.append(bm)
+        return out
 
+    # -------- parser quote --------
+    def _parse_from_blocks(self, blocks: List[Dict]) -> Dict[str, float]:
+        out: Dict[str, float] = {}
         def put(k: str, v):
             if v is None:
                 return
@@ -82,13 +79,12 @@ class APIFootball:
                 x = float(v)
             except:
                 return
-            if x <= 1.05:
+            if x <= 1.05:  # scarta mercati sospesi / placeholder
                 return
             if k not in out or x < out[k]:
                 out[k] = x
 
-        bet365_fresh = self._bet365_blocks_fresh(odds_resp)
-        for bm in bet365_fresh:
+        for bm in blocks:
             for bet in bm.get("bets", []):
                 name = (bet.get("name", "") or "").lower()
                 vals = bet.get("values", [])
@@ -140,5 +136,15 @@ class APIFootball:
                         lab = (v.get("value","") or "").lower(); odd = v.get("odd")
                         if "home - yes" in lab or lab.strip() == "home yes": put("Home to Score", odd)
                         elif "away - yes" in lab or lab.strip() == "away yes": put("Away to Score", odd)
-
         return out
+
+    # -------- API pubbliche --------
+    def parse_markets_bet365(self, odds_resp: List[Dict]) -> Dict[str, float]:
+        """ SOLO blocchi Bet365 *freschi* (per INVIO/preview realtime). """
+        fresh = self._bet365_blocks_fresh(odds_resp)
+        return self._parse_from_blocks(fresh)
+
+    def parse_markets_bet365_allow_stale(self, odds_resp: List[Dict]) -> Dict[str, float]:
+        """ Blocchi Bet365 *anche stantii* (per BUILDER/PLANNER). """
+        blocks = self._bet365_blocks(odds_resp)
+        return self._parse_from_blocks(blocks)
