@@ -83,7 +83,7 @@ class LiveEngine:
         if market == "DNB Home":
             if finished:
                 if gh>ga: return "WON"
-                if gh<ga: return "LOST"
+                if gh<gh: return "LOST"
                 return "VOID"
             return "PENDING"
         if market == "DNB Away":
@@ -92,10 +92,11 @@ class LiveEngine:
                 if ga<gh: return "LOST"
                 return "VOID"
             return "PENDING"
-        if market in ("BTTS Yes","BTTS No"):
+        # >>> MODIFICA: rinomina BTTS Yes/No in Gol/No Gol
+        if market in ("Gol","No Gol"):
             if finished:
-                if market=="BTTS Yes": return "WON" if (gh>=1 and ga>=1) else "LOST"
-                else: return "WON" if (gh==0 or ga==0) else "LOST"
+                if market=="Gol":     return "WON" if (gh>=1 and ga>=1) else "LOST"
+                else:                 return "WON" if (gh==0 or ga==0) else "LOST"
             return "PENDING"
         return "PENDING"
 
@@ -151,7 +152,7 @@ class LiveEngine:
                     elif m=="1X" and gh>=ga: line="Linea 1X in controllo. ✅"
                     elif m=="X2" and ga>=gh: line="Linea X2 in controllo. ✅"
                     elif m=="Under 3.5" and (gh+ga)<=3 and status_short in ("HT","2H"): line="Under 3.5 in controllo. ✅"
-                    elif m in ("BTTS Yes","BTTS No"): line=f"{m} in traiettoria. ✅"
+                    elif m in ("Gol","No Gol"): line=f"{m} in traiettoria. ✅"  # <--- MODIFICA QUI
                     if line:
                         self.tg.send_message(render_live_energy(sel["home"], sel["away"], minute, line, short_id))
                         self._energy_sent_selections.add(sel["id"])
