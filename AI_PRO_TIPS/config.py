@@ -1,21 +1,16 @@
 import os
 
 class Config:
-    # --- Credenziali / ambiente ---
     TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
     CHANNEL_ID     = int(os.getenv("CHANNEL_ID", "0"))
     ADMIN_ID       = int(os.getenv("ADMIN_ID", "0"))
     MYSQL_URL      = os.getenv("MYSQL_URL", "")
     APIFOOTBALL_KEY= os.getenv("APIFOOTBALL_KEY", "")
     TZ             = os.getenv("TZ", "Europe/Rome")
-
-    # --- Link del canale per CTA (serve a templates/sender/commands) ---
     CHANNEL_LINK   = os.getenv("CHANNEL_LINK", "https://t.me/AIProTips")
 
-    # --- Quiet hours ---
-    QUIET_HOURS = (0, 8)  # (start_hour, end_hour)
+    QUIET_HOURS = (0, 8)
 
-    # --- Piano giornaliero ---
     DAILY_PLAN = {
         "value_singles": 2,
         "combos": [
@@ -24,14 +19,9 @@ class Config:
             {"legs": 5,     "leg_lo": 1.20, "leg_hi": 1.50},
             {"legs": "8-12","leg_lo": 1.10, "leg_hi": 1.36},
         ],
-        "random_content": {
-            "stat_flash_per_day": 2,
-            "story_per_day": 2,
-            "banter_per_day": 2
-        }
+        "random_content": {"stat_flash_per_day": 2, "story_per_day": 2, "banter_per_day": 2}
     }
 
-    # --- Whitelist competizioni (country,name) ---
     ALLOWED_COMP_NAMES = {
         ("italy","serie a"), ("italy","serie b"), ("italy","serie c"), ("italy","coppa italia"),
         ("england","premier league"), ("england","championship"), ("england","fa cup"), ("england","efl cup"),
@@ -53,6 +43,5 @@ class Config:
         ("brazil","serie a"), ("argentina","liga profesional"), ("usa","mls")
     }
 
-    # --- Frequenze loop ---
     AUTOPILOT_TICK_SECONDS = int(os.getenv("AUTOPILOT_TICK_SECONDS", "30"))
     LIVE_POLL_SECONDS      = int(os.getenv("LIVE_POLL_SECONDS", "40"))
