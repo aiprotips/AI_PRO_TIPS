@@ -11,8 +11,10 @@ from .api_football import APIFootball
 from .commands import CommandsLoop
 from .live_alerts import LiveAlerts  # nuovo modulo per gli alert
 
-# NEW: import per il job mattutino
+# NEW: import per il job mattutino + publisher + closer
 from .morning_job import run_morning
+from .scheduler import ScheduledPublisher
+from .closer import Closer
 
 def main():
     cfg = Config()
@@ -86,15 +88,39 @@ def main():
                 print(f"[morning] error: {e}")
                 time.sleep(10)
 
+    # NEW: Publisher che posta sul canale i record in coda (send_at raggiunto)
+    pub = ScheduledPublisher(cfg, tg)
+    def loop_publisher():
+        while True:
+            try:
+                pub.run_forever()
+            except Exception as e:
+                print(f"[publisher] restart after error: {e}")
+                time.sleep(5)
+
+    # NEW: Closer che monitora esiti / live energy / finali schedine
+    closer = Closer(cfg, tg, api)
+    def loop_closer():
+        while True:
+            try:
+                closer.run_forever()
+            except Exception as e:
+                print(f"[closer] restart after error: {e}")
+                time.sleep(5)
+
     # --- Avvio thread ---
     threading.Thread(target=loop_commands, daemon=True).start()
     threading.Thread(target=loop_live_alerts, daemon=True).start()
     threading.Thread(target=loop_daily_watchlist, daemon=True).start()
     threading.Thread(target=loop_morning_scheduler, daemon=True).start()  # NEW
+    threading.Thread(target=loop_publisher, daemon=True).start()          # NEW
+    threading.Thread(target=loop_closer, daemon=True).start()             # NEW
 
     # keep alive (il processo Railway deve restare vivo)
     while True:
         time.sleep(3600)
 
+if __name__ == "__main__":
+    main()
 if __name__ == "__main__":
     main()
