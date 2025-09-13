@@ -1,17 +1,14 @@
 # app/live_alerts.py
-# Live Alerts — favorita pre ≤ 1.26 che va sotto entro 20' senza rosso
-# Doppio controllo a 60s. Ora invia DM all'ADMIN_ID e anche nel canale (se CHANNEL_ID è configurato).
-
 from __future__ import annotations
 from typing import Dict, Any, Tuple
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
-PRE_FAV_MAX = 1.26           # soglia favorita pre-match
-EARLY_MINUTE_MAX = 20        # entro il 20'
-DOUBLECHECK_SECONDS = 60     # delay per secondo controllo
-POLL_SECONDS = 25            # frequenza polling live
+PRE_FAV_MAX = 1.26
+EARLY_MINUTE_MAX = 20
+DOUBLECHECK_SECONDS = 60
+POLL_SECONDS = 25
 
 def _norm(s: str) -> str:
     return (s or "").strip().lower()
@@ -56,6 +53,17 @@ def _has_red_card_for(team_name: str, events_resp: Dict[str, Any]) -> bool:
         pass
     return False
 
+def _safe_send(tg, chat_id: int, text: str):
+    try:
+        return tg.send_message(text, chat_id=chat_id)
+    except TypeError:
+        return tg.send_message(chat_id, text)
+    except Exception:
+        try:
+            return tg.send_message(text, chat_id=chat_id)
+        except Exception:
+            pass
+
 class LiveAlerts:
     def __init__(self, cfg, tg, api):
         self.cfg = cfg
@@ -78,10 +86,10 @@ class LiveAlerts:
 
         try:
             from .leagues import allowed_league
-            def league_ok(lg): 
+            def league_ok(lg):
                 return allowed_league(lg.get("country",""), lg.get("name",""))
         except Exception:
-            def league_ok(lg): 
+            def league_ok(lg):
                 return True
 
         count = 0
@@ -123,10 +131,7 @@ class LiveAlerts:
             }
             count += 1
 
-        try:
-            self.tg.send_message(f"🔎 LiveAlerts: watchlist caricata ({count} favorite ≤ {PRE_FAV_MAX}).", chat_id=self.cfg.ADMIN_ID)
-        except Exception:
-            pass
+        _safe_send(self.tg, self.cfg.ADMIN_ID, f"🔎 LiveAlerts: watchlist caricata ({count} favorite ≤ {PRE_FAV_MAX}).")
 
     def _fixture_losing_info(self, fx: Dict[str, Any], fav_side: str) -> Tuple[bool, int]:
         try:
@@ -167,16 +172,12 @@ class LiveAlerts:
             f"🎯 Idea ingresso: vittoria <b>{fav}</b> (spot live)\n"
             f"(doppio check eseguito)"
         )
-        try:
-            self.tg.send_message(msg, chat_id=self.cfg.ADMIN_ID)
-        except Exception:
-            pass
-        try:
-            channel_id = getattr(self.cfg, "CHANNEL_ID", None)
-            if channel_id:
-                self.tg.send_message(msg, chat_id=channel_id)
-        except Exception:
-            pass
+        # DM admin
+        _safe_send(self.tg, self.cfg.ADMIN_ID, msg)
+        # canale (se configurato)
+        channel_id = getattr(self.cfg, "CHANNEL_ID", None)
+        if channel_id:
+            _safe_send(self.tg, channel_id, msg)
 
     def _handle_live_fixture(self, fx: Dict[str, Any]):
         fid = int((fx.get("fixture", {}) or {}).get("id") or 0)
