@@ -17,10 +17,6 @@ def _norm(s: str) -> str:
     return (s or "").strip().lower()
 
 def _parse_match_winner_from_odds(odds_resp: list) -> Dict[str, float]:
-    """
-    Parser minimale: estrae solo Match Winner full-time (1,2) da odds_resp /odds?fixture=...&bookmaker=8.
-    Filtra quote <=1.05 (placeholder).
-    """
     out = {}
     try:
         for entry in odds_resp:
@@ -49,7 +45,6 @@ def _parse_match_winner_from_odds(odds_resp: list) -> Dict[str, float]:
         return out
 
 def _has_red_card_for(team_name: str, events_resp: Dict[str, Any]) -> bool:
-    """Controlla se team_name ha ricevuto un rosso negli events del fixture."""
     try:
         events = events_resp.get("response", []) or []
         for ev in events:
@@ -62,39 +57,25 @@ def _has_red_card_for(team_name: str, events_resp: Dict[str, Any]) -> bool:
     return False
 
 class LiveAlerts:
-    """
-    Usage:
-      la = LiveAlerts(cfg, tg, api)
-      la.build_morning_watchlist()       # chiamalo alle 08:00 locali
-      la.run_forever()                   # in un thread dedicato
-
-    Ora invia anche nel canale (se CHANNEL_ID è configurato).
-    """
-
     def __init__(self, cfg, tg, api):
         self.cfg = cfg
         self.tg  = tg
         self.api = api
         self.tz  = ZoneInfo(getattr(cfg, "TZ", "Europe/Rome"))
-        self.watch: Dict[int, Dict[str, Any]] = {}        # fixture_id -> info favorita
-        self.pending_check: Dict[int, float] = {}         # fixture_id -> epoch_time del primo trigger
-        self.alerted: set[int] = set()                    # fixture già alertate (no duplicati)
+        self.watch: Dict[int, Dict[str, Any]] = {}
+        self.pending_check: Dict[int, float] = {}
+        self.alerted: set[int] = set()
 
     def _now_local(self) -> datetime:
         return datetime.now(self.tz)
 
     def build_morning_watchlist(self):
-        """
-        Costruisce la watchlist dai fixtures di OGGI: favorite pre ≤ 1.26
-        Solo leghe whitelisted.
-        """
         today = self._now_local().strftime("%Y-%m-%d")
         try:
             fixtures = self.api.fixtures_by_date(today)
         except Exception:
             fixtures = []
 
-        # filtro leghe whitelisted
         try:
             from .leagues import allowed_league
             def league_ok(lg): 
@@ -111,29 +92,23 @@ class LiveAlerts:
             fid = int((fx.get("fixture", {}) or {}).get("id") or 0)
             if not fid:
                 continue
-
-            # quote pre-match Bet365 per match winner (1,2)
             try:
                 odds_resp = self.api.odds_by_fixture_bet365(fid)
                 mw = _parse_match_winner_from_odds(odds_resp)
             except Exception:
                 mw = {}
-
             if not mw:
                 continue
 
-            # trova favorita e controlla soglia
             odd1 = mw.get("1"); odd2 = mw.get("2")
             fav_side = None; fav_pre = None
             if odd1 and (not odd2 or odd1 <= odd2):
                 fav_side, fav_pre = "home", odd1
             elif odd2:
                 fav_side, fav_pre = "away", odd2
-
             if (fav_pre is None) or (float(fav_pre) > PRE_FAV_MAX):
                 continue
 
-            # salva info
             tms = fx.get("teams", {}) or {}
             fav_name = (tms.get(fav_side, {}) or {}).get("name") or (fx.get("fixture", {}).get("teams", {}) or {}).get(fav_side, {}).get("name") or fav_side
             other_side = "away" if fav_side == "home" else "home"
@@ -148,14 +123,12 @@ class LiveAlerts:
             }
             count += 1
 
-        # feedback all'admin
         try:
-            self.tg.send_message(self.cfg.ADMIN_ID, f"🔎 LiveAlerts: watchlist caricata ({count} favorite ≤ {PRE_FAV_MAX}).")
+            self.tg.send_message(f"🔎 LiveAlerts: watchlist caricata ({count} favorite ≤ {PRE_FAV_MAX}).", chat_id=self.cfg.ADMIN_ID)
         except Exception:
             pass
 
     def _fixture_losing_info(self, fx: Dict[str, Any], fav_side: str) -> Tuple[bool, int]:
-        """Ritorna (is_losing, minute) per la favorita nel fixture fx."""
         try:
             info = fx.get("fixture", {}) or {}
             minute = int(((info.get("status", {}) or {}).get("elapsed") or 0))
@@ -171,13 +144,9 @@ class LiveAlerts:
             ev = self.api._get("/fixtures/events", {"fixture": fid})
             return not _has_red_card_for(fav_name, ev)
         except Exception:
-            return True  # se non riusciamo a leggere eventi, non bloccare
+            return True
 
     def _current_live_price_for_fav(self, fid: int, fav_side: str) -> float | None:
-        """
-        Prova a leggere la quota live (Bet365) per la vittoria della favorita.
-        (Non sempre disponibile in modo affidabile; se non c'è, restituisce None)
-        """
         try:
             odds_resp = self.api.odds_by_fixture_bet365(fid)
             mw = _parse_match_winner_from_odds(odds_resp)
@@ -188,8 +157,7 @@ class LiveAlerts:
 
     def _send_alert(self, rec: Dict[str, Any], fid: int, minute: int, live_price: float | None):
         fav = rec["fav_name"]; other = rec["other_name"]
-        pre = rec["pre_odd"]
-        league = rec["league"]
+        pre = rec["pre_odd"]; league = rec["league"]
         lp_str = f"{live_price:.2f}" if isinstance(live_price, (int,float)) else "n/d"
         msg = (
             f"⚡ <b>LIVE ALERT</b>\n\n"
@@ -199,16 +167,14 @@ class LiveAlerts:
             f"🎯 Idea ingresso: vittoria <b>{fav}</b> (spot live)\n"
             f"(doppio check eseguito)"
         )
-        # invia DM all'admin
         try:
-            self.tg.send_message(self.cfg.ADMIN_ID, msg)
+            self.tg.send_message(msg, chat_id=self.cfg.ADMIN_ID)
         except Exception:
             pass
-        # invia nel canale se configurato
         try:
             channel_id = getattr(self.cfg, "CHANNEL_ID", None)
             if channel_id:
-                self.tg.send_message(channel_id, msg)
+                self.tg.send_message(msg, chat_id=channel_id)
         except Exception:
             pass
 
@@ -217,8 +183,7 @@ class LiveAlerts:
         if fid not in self.watch or fid in self.alerted:
             return
         rec = self.watch[fid]
-        fav_side = rec["fav_side"]
-        fav_name = rec["fav_name"]
+        fav_side = rec["fav_side"]; fav_name = rec["fav_name"]
 
         losing, minute = self._fixture_losing_info(fx, fav_side)
         if not losing or minute <= 0 or minute > EARLY_MINUTE_MAX:
@@ -228,11 +193,9 @@ class LiveAlerts:
 
         now = time.time()
         if fid not in self.pending_check:
-            # primo trigger → salva timestamp e aspetta il secondo controllo
             self.pending_check[fid] = now
             return
 
-        # se sono passati >= DOUBLECHECK_SECONDS dal primo trigger, ricontrolla
         if now - self.pending_check[fid] >= DOUBLECHECK_SECONDS:
             try:
                 fx2 = self.api.fixture_by_id(fid) or {}
@@ -243,11 +206,9 @@ class LiveAlerts:
                 live_price = self._current_live_price_for_fav(fid, fav_side)
                 self._send_alert(rec, fid, minute2, live_price)
                 self.alerted.add(fid)
-            # cleanup pending (sia che alerti, sia che no; se continua losing, rifarà pending al prossimo giro)
             self.pending_check.pop(fid, None)
 
     def tick(self):
-        """Un giro di controllo live; da richiamare periodicamente (es. ogni 25s)."""
         try:
             lives = self.api.live_fixtures()
         except Exception:
