@@ -1,0 +1,500 @@
+Finale amaro. Avanti dritti.
+Quasi fatta. Spunta mancata, prossima.
+Si torna in pista. Pressione on.
+Road to green
+Linea ok, finale no. React & go.
+Quasi cassa
+Quasi al traguardo
+Testa alta
+Ancora un attimo. Strada tracciata.
+Resta il segno
+Vicini al colpo
+Ben impostata. Si torna a spingere.
+Chapeau alla lettura
+Ci sta, si riparte
+Finale amaro
+A un niente. Avanti senza esitazioni.
+Fuori di un soffio. Pressione on.
+Quasi dentro
+Subito la prossima. Prossimo colpo.
+Tutto giusto, tranne una
+Niente drammi
+Manca l’ultimo step
+A un millimetro
+Focus on. Traiettoria buona.
+La prossima è nostra
+Ci è mancato poco. Niente panico.
+Questione di centimetri
+Niente drammi. Step by step.
+Ci siamo quasi. Tutto ok.
+Green sfiorato
+Fuori di un soffio
+Ben impostata
+Rifacciamola
+Indicazioni positive. Verde in arrivo.
+Un dettaglio. Ci sta.
+Vicini al colpo. Si corregge il tiro.
+A un passo
+Questione di centimetri. Teniamoci pronti.
+Rifacciamola. Zero fronzoli, si va.
+Green sfiorato. Calma e lavoro.
+Road to green. Si torna sul pezzo.
+Ci sta, si riparte. Avanti senza esitazioni.
+Ancora un attimo. Si aggiusta e via.
+Fame intatta
+Linea ok, finale no. Tutto sotto controllo.
+Ci è mancato poco. Traiettoria buona.
+Quasi leggenda. Linea giusta.
+Ci è mancato poco. Fiducia alta.
+Un dettaglio
+Buona la traccia
+Subito la prossima
+All’ultimo respiro. Si aggiusta e via.
+Road to green. Ritmo costante.
+All’ultimo respiro. Non cambia nulla.
+Linea ok, finale no
+A un niente
+Niente drammi. Avanti dritti.
+Questione di centimetri. Niente panico.
+Ci torniamo. Step by step.
+Quasi leggenda. Si sistema e via.
+Domani meglio
+Ci è mancato poco
+La prossima è nostra. Gara lunga.
+Un passo. Tutto sotto controllo.
+Vicini al colpo. Verde in arrivo.
+Buon segnale
+Indicazioni positive. Domani si spinge.
+Linea ok, finale no. Testa fredda e avanti.
+Ben impostata. Avanti dritti.
+Testa alta. Subito focus.
+Ci siamo quasi
+Solo dettagli
+Giro dopo giro. Si ricarica e si riparte.
+Quasi leggenda. Continuità e arriva la cassa.
+Per un soffio. Verde in arrivo.
+Per un soffio. Si torna a spingere.
+Ci rivediamo tra poco. Non cambia nulla.
+Quasi al traguardo. Linea giusta.
+Quasi leggenda. Spunta mancata, prossima.
+Non cambia la rotta
+Rifacciamola. Restiamo affilati.
+Una fuori posto. Tutto sotto controllo.
+Si torna in pista
+Ancora un attimo
+Ci siamo quasi. Step by step.
+Sul filo. Margine sottile.
+Reset e avanti. Ci siamo quasi.
+Ancora un attimo. Si riparte subito.
+Non cambia la rotta. Si torna a spingere.
+All’ultimo respiro
+Per un soffio. Prossima occasione.
+Non cambia la rotta. Linea giusta.
+Chapeau alla lettura. Si aggiusta e via.
+Buon segnale. Andiamo a prendercela.
+Vicini al colpo. Non cambia nulla.
+Reset e avanti. Frame giusto.
+Ci torniamo. Si aggiusta e via.
+Buon segnale. Zero fronzoli, si va.
+Sul filo. Prossimo colpo.
+Per un soffio. Calma e lavoro.
+Giro dopo giro
+Ci siamo quasi. Avanti dritti.
+Ancora un attimo. Si torna a spingere.
+Riproviamo
+Chapeau alla lettura. Prossima occasione.
+Solo dettagli. Domani si spinge.
+Si torna in pista. Numeri dalla nostra.
+Ci sta, si riparte. Fiducia alta.
+Green sfiorato. Prossima in arrivo.
+Indicazioni positive
+Ci è mancato poco. Subito focus.
+Una fuori posto
+Un dettaglio. Prossima in arrivo.
+Chapeau alla lettura. Restiamo affilati.
+Fame intatta. Linea giusta.
+Ci siamo quasi. Subito focus.
+Ci torniamo. Margine sottile.
+Domani meglio. Ci sta.
+A un millimetro. Prossimo colpo.
+Questione di centimetri. Si riparte subito.
+Green sfiorato. Siamo sulla strada giusta.
+Quasi cassa. Avanti dritti.
+Ben impostata. Prossima in arrivo.
+Solo dettagli. Ci siamo quasi.
+Si torna in pista. Si ricarica e si riparte.
+Ci sta, si riparte. Teniamoci pronti.
+Testa alta. Non cambia nulla.
+Ci torniamo
+Niente drammi. Linea giusta.
+Fame intatta. Prossima occasione.
+Quasi cassa. Non cambia nulla.
+Sfumata sul più bello. Teniamoci pronti.
+Riproviamo. Bene così.
+Quasi fatta. Prossima in arrivo.
+Chapeau alla lettura. Non cambia nulla.
+Tutto giusto, tranne una. Margine sottile.
+Fuori di un soffio. Non cambia nulla.
+Tutto giusto, tranne una. Si ricarica e si riparte.
+Rifacciamola. Calma e lavoro.
+Buona la traccia. Avanti senza esitazioni.
+Sfumata sul più bello. Si aggiusta e via.
+Quasi leggenda. Si torna sul pezzo.
+La prossima è nostra. Focus e disciplina.
+Niente drammi. Continuità e arriva la cassa.
+Buona la traccia. La rotta è buona.
+Un dettaglio. Si riparte subito.
+Ci è mancato poco. Continuità e arriva la cassa.
+Quasi cassa. Calma e lavoro.
+Ci rivediamo tra poco. Restiamo affilati.
+Ci sta, si riparte. Linea giusta.
+Ben impostata. Linea giusta.
+Quasi cassa. Siamo sulla strada giusta.
+Tutto giusto, tranne una. Tutto sotto controllo.
+Ben impostata. Traiettoria buona.
+Buona la traccia. Si riparte subito.
+Buona la traccia. Ci siamo quasi.
+Focus on. Avanti dritti.
+Ci sta, si riparte. Frame giusto.
+Ci rivediamo tra poco
+Non cambia la rotta. Prossima in arrivo.
+Reset e avanti. Siamo sulla strada giusta.
+Un passo. Niente panico.
+A un passo. React & go.
+Road to green. Frame giusto.
+Sfumata sul più bello
+All’ultimo respiro. Resta il valore.
+Una fuori posto. Si aggiusta e via.
+Riproviamo. Andiamo a prendercela.
+Quasi fatta
+Niente drammi. Tutto ok.
+Quasi al traguardo. Si riparte subito.
+Ci siamo quasi. Si aggiusta e via.
+Sfumata sul più bello. Ci siamo quasi.
+Vicini al colpo. Niente panico.
+Questione di centimetri. Andiamo a prendercela.
+Quasi leggenda
+Una fuori posto. Numeri dalla nostra.
+Per un soffio. Si sistema e via.
+Per un soffio
+Ben impostata. Non cambia nulla.
+Reset e avanti
+Giro dopo giro. Ritmo costante.
+Fame intatta. Prossimo colpo.
+Ci siamo quasi. Prossimo colpo.
+Resta il segno. Si sistema e via.
+Reset e avanti. Fiducia alta.
+Reset e avanti. Tutto sotto controllo.
+Reset e avanti. Teniamoci pronti.
+Road to green. Avanti dritti.
+Testa alta. Restiamo affilati.
+Buona la traccia. React & go.
+Finale amaro. Prossimo colpo.
+Per un soffio. Non cambia nulla.
+Fuori di un soffio. Focus e disciplina.
+Un dettaglio. Niente panico.
+Chapeau alla lettura. Spunta mancata, prossima.
+Non cambia la rotta. Testa fredda e avanti.
+Rifacciamola. Andiamo a prendercela.
+Rifacciamola. Spunta mancata, prossima.
+Linea ok, finale no. Teniamoci pronti.
+La prossima è nostra. Step by step.
+Ci torniamo. Andiamo a prendercela.
+Manca l’ultimo step. Avanti senza esitazioni.
+A un millimetro. Si ricarica e si riparte.
+Riproviamo. Si aggiusta e via.
+Ci è mancato poco. Si aggiusta e via.
+Un dettaglio. Resta il valore.
+Green sfiorato. Si impara e si riparte.
+La prossima è nostra. Si corregge il tiro.
+Domani meglio. La rotta è buona.
+Finale amaro. Si sistema e via.
+Linea ok, finale no. Continuità e arriva la cassa.
+Linea ok, finale no. Andiamo a prendercela.
+Road to green. Avanti senza esitazioni.
+Reset e avanti. React & go.
+Quasi cassa. Bene così.
+Sul filo. Gara lunga.
+A un passo. Non ci fermiamo.
+Testa alta. Si riparte subito.
+Ci sta, si riparte. Strada tracciata.
+Buona la traccia. Linea giusta.
+Quasi dentro. Calma e lavoro.
+Chapeau alla lettura. Verde in arrivo.
+La prossima è nostra. Siamo sulla strada giusta.
+Ci siamo quasi. Margine sottile.
+Niente drammi. Siamo sulla strada giusta.
+Ben impostata. Prossimo colpo.
+Buona la traccia. Bene così.
+Capita. Si sistema e via.
+Una fuori posto. Si riparte subito.
+Linea ok, finale no. Si aggiusta e via.
+Ancora un attimo. Ci siamo quasi.
+Quasi dentro. Testa fredda e avanti.
+Indicazioni positive. Step by step.
+Green sfiorato. Tutto ok.
+A un millimetro. Restiamo affilati.
+Tutto giusto, tranne una. Si corregge il tiro.
+Green sfiorato. Zero fronzoli, si va.
+Resta il segno. Non ci fermiamo.
+Reset e avanti. Tutto ok.
+Linea ok, finale no. Fiducia alta.
+Capita. Numeri dalla nostra.
+All’ultimo respiro. Bene così.
+Finale amaro. Teniamoci pronti.
+Tutto giusto, tranne una. Si aggiusta e via.
+Ben impostata. Tutto sotto controllo.
+Solo dettagli. Subito focus.
+Una fuori posto. Domani si spinge.
+Buon segnale. Ritmo costante.
+Tutto giusto, tranne una. Traiettoria buona.
+Quasi dentro. Ci sta.
+Un dettaglio. Andiamo a prendercela.
+Finale amaro. Domani si spinge.
+Buona la traccia. Gara lunga.
+Quasi al traguardo. Si aggiusta e via.
+Quasi al traguardo. Margine sottile.
+Una fuori posto. Focus e disciplina.
+Ci è mancato poco. Focus e disciplina.
+Quasi cassa. La rotta è buona.
+Questione di centimetri. Passo dopo passo.
+Fuori di un soffio. Prossimo colpo.
+La prossima è nostra. Traiettoria buona.
+Capita. Prossima occasione.
+Green sfiorato. React & go.
+Niente drammi. Si corregge il tiro.
+Rifacciamola. Traiettoria buona.
+Quasi leggenda. Pressione on.
+Green sfiorato. Ritmo costante.
+Indicazioni positive. Numeri dalla nostra.
+Quasi cassa. Testa fredda e avanti.
+Un dettaglio. Testa fredda e avanti.
+Questione di centimetri. Continuità e arriva la cassa.
+Fuori di un soffio. Verde in arrivo.
+Subito la prossima. Prossima in arrivo.
+Resta il segno. Si aggiusta e via.
+Quasi dentro. Bene così.
+Un passo. Ci sta.
+Giro dopo giro. Frame giusto.
+Indicazioni positive. Avanti senza esitazioni.
+Fame intatta. Non cambia nulla.
+Vicini al colpo. Step by step.
+Finale amaro. Siamo sulla strada giusta.
+Chapeau alla lettura. Strada tracciata.
+Testa alta. Traiettoria buona.
+Ci è mancato poco. Teniamoci pronti.
+Non cambia la rotta. Si riparte subito.
+Sul filo. Non ci fermiamo.
+Ci torniamo. Continuità e arriva la cassa.
+Green sfiorato. Restiamo affilati.
+Finale amaro. Focus e disciplina.
+Quasi leggenda. Si corregge il tiro.
+Capita. Si corregge il tiro.
+Ci siamo quasi. Avanti senza esitazioni.
+Solo dettagli. Si sistema e via.
+Indicazioni positive. Subito focus.
+Green sfiorato. Margine sottile.
+Questione di centimetri. Numeri dalla nostra.
+Una fuori posto. Avanti senza esitazioni.
+Quasi dentro. La rotta è buona.
+La prossima è nostra. Andiamo a prendercela.
+Chapeau alla lettura. Resta il valore.
+Riproviamo. Ci siamo quasi.
+Subito la prossima. Si riparte subito.
+Riproviamo. Frame giusto.
+Rifacciamola. Niente panico.
+Si torna in pista. Andiamo a prendercela.
+Questione di centimetri. Ci siamo quasi.
+Quasi fatta. Avanti senza esitazioni.
+Quasi al traguardo. Frame giusto.
+Quasi cassa. Prossima in arrivo.
+A un passo. Domani si spinge.
+A un millimetro. Non cambia nulla.
+Questione di centimetri. Avanti senza esitazioni.
+Buona la traccia. Tutto sotto controllo.
+Non cambia la rotta. Continuità e arriva la cassa.
+Fuori di un soffio. Testa fredda e avanti.
+Finale amaro. React & go.
+Non cambia la rotta. Step by step.
+Ancora un attimo. Passo dopo passo.
+Rifacciamola. Pressione on.
+La prossima è nostra. Prossima occasione.
+A un passo. Continuità e arriva la cassa.
+Sul filo. Prossima in arrivo.
+Quasi fatta. Passo dopo passo.
+Questione di centimetri. Si impara e si riparte.
+Focus on. Andiamo a prendercela.
+Per un soffio. Avanti dritti.
+All’ultimo respiro. Tutto sotto controllo.
+Ancora un attimo. Si impara e si riparte.
+Reset e avanti. Avanti dritti.
+A un millimetro. Non ci fermiamo.
+Vicini al colpo. Passo dopo passo.
+Road to green. Ci sta.
+Riproviamo. Testa fredda e avanti.
+Buon segnale. Frame giusto.
+Chapeau alla lettura. Fiducia alta.
+Subito la prossima. Spunta mancata, prossima.
+Reset e avanti. Si corregge il tiro.
+Capita. Step by step.
+Ci siamo quasi. Domani si spinge.
+Sfumata sul più bello. Ritmo costante.
+A un niente. Pressione on.
+A un passo. Siamo sulla strada giusta.
+Sfumata sul più bello. Zero fronzoli, si va.
+Domani meglio. Traiettoria buona.
+All’ultimo respiro. Teniamoci pronti.
+Ci è mancato poco. Passo dopo passo.
+Un passo. Avanti senza esitazioni.
+Quasi leggenda. Traiettoria buona.
+Ancora un attimo. La rotta è buona.
+Quasi cassa. Numeri dalla nostra.
+Vicini al colpo. Zero fronzoli, si va.
+Capita. Spunta mancata, prossima.
+Sul filo. Si corregge il tiro.
+Resta il segno. Spunta mancata, prossima.
+Quasi leggenda. Ritmo costante.
+Fame intatta. Passo dopo passo.
+Linea ok, finale no. Si corregge il tiro.
+Linea ok, finale no. Resta il valore.
+Rifacciamola. Avanti senza esitazioni.
+Manca l’ultimo step. Niente panico.
+Fuori di un soffio. Traiettoria buona.
+Vicini al colpo. Andiamo a prendercela.
+Manca l’ultimo step. Prossimo colpo.
+Fuori di un soffio. Subito focus.
+Ci rivediamo tra poco. Prossimo colpo.
+Domani meglio. Prossimo colpo.
+Ci rivediamo tra poco. Prossima in arrivo.
+Domani meglio. Linea giusta.
+Fuori di un soffio. Avanti dritti.
+Un passo. Gara lunga.
+La prossima è nostra. Spunta mancata, prossima.
+Buona la traccia. Ritmo costante.
+Ancora un attimo. Andiamo a prendercela.
+Indicazioni positive. Niente panico.
+Ancora un attimo. Step by step.
+Testa alta. Linea giusta.
+A un passo. Niente panico.
+Sfumata sul più bello. Focus e disciplina.
+Sul filo. Si aggiusta e via.
+Ci rivediamo tra poco. Bene così.
+Rifacciamola. Si torna a spingere.
+Tutto giusto, tranne una. Avanti senza esitazioni.
+Testa alta. Prossima in arrivo.
+A un passo. Andiamo a prendercela.
+Vicini al colpo. Si ricarica e si riparte.
+Per un soffio. Resta il valore.
+Buon segnale. Prossimo colpo.
+Green sfiorato. Tutto sotto controllo.
+Buon segnale. Tutto ok.
+Riproviamo. Si torna sul pezzo.
+Chapeau alla lettura. Step by step.
+Si torna in pista. Linea giusta.
+La prossima è nostra. Restiamo affilati.
+Quasi dentro. Focus e disciplina.
+Un passo. Si impara e si riparte.
+Ci è mancato poco. Step by step.
+Fame intatta. Frame giusto.
+Si torna in pista. Ritmo costante.
+Giro dopo giro. Avanti dritti.
+Reset e avanti. Ci sta.
+Tutto giusto, tranne una. Prossimo colpo.
+Subito la prossima. Si sistema e via.
+Si torna in pista. React & go.
+Rifacciamola. Numeri dalla nostra.
+Reset e avanti. Si torna a spingere.
+Per un soffio. Spunta mancata, prossima.
+Resta il segno. Focus e disciplina.
+Quasi fatta. Prossima occasione.
+Una fuori posto. Strada tracciata.
+Capita. Niente panico.
+Reset e avanti. Niente panico.
+Quasi al traguardo. Fiducia alta.
+Ben impostata. Si sistema e via.
+Sul filo. Avanti dritti.
+Resta il segno. Zero fronzoli, si va.
+Indicazioni positive. Prossima in arrivo.
+Quasi cassa. Traiettoria buona.
+Buona la traccia. Traiettoria buona.
+Quasi cassa. Spunta mancata, prossima.
+Fuori di un soffio. Teniamoci pronti.
+Road to green. Restiamo affilati.
+Non cambia la rotta. Fiducia alta.
+Ci è mancato poco. Restiamo affilati.
+Domani meglio. Si ricarica e si riparte.
+Green sfiorato. Prossima occasione.
+Buon segnale. Calma e lavoro.
+Manca l’ultimo step. Si corregge il tiro.
+Fuori di un soffio. Avanti senza esitazioni.
+Ci rivediamo tra poco. Prossima occasione.
+Riproviamo. Siamo sulla strada giusta.
+Manca l’ultimo step. Prossima in arrivo.
+Testa alta. Continuità e arriva la cassa.
+Ben impostata. Testa fredda e avanti.
+Sul filo. Niente panico.
+Un passo. Linea giusta.
+Solo dettagli. Non cambia nulla.
+Reset e avanti. Si riparte subito.
+Ci sta, si riparte. Step by step.
+Finale amaro. Numeri dalla nostra.
+Niente drammi. Domani si spinge.
+Vicini al colpo. Siamo sulla strada giusta.
+Quasi leggenda. Andiamo a prendercela.
+Si torna in pista. Si aggiusta e via.
+Linea ok, finale no. Calma e lavoro.
+Sul filo. Ritmo costante.
+A un passo. Si torna sul pezzo.
+Ancora un attimo. Spunta mancata, prossima.
+Riproviamo. React & go.
+Questione di centimetri. Restiamo affilati.
+Reset e avanti. La rotta è buona.
+A un niente. Numeri dalla nostra.
+Quasi dentro. Ritmo costante.
+Resta il segno. Step by step.
+Niente drammi. Passo dopo passo.
+Buona la traccia. Niente panico.
+Per un soffio. Strada tracciata.
+Domani meglio. Subito focus.
+Ci è mancato poco. Si torna sul pezzo.
+Ci sta, si riparte. Tutto sotto controllo.
+Ci è mancato poco. Non ci fermiamo.
+Capita. Prossima in arrivo.
+Ci siamo quasi. Prossima occasione.
+Vicini al colpo. Linea giusta.
+Quasi al traguardo. Si torna a spingere.
+Buona la traccia. Restiamo affilati.
+Quasi al traguardo. Avanti senza esitazioni.
+A un niente. Linea giusta.
+Una fuori posto. Andiamo a prendercela.
+Indicazioni positive. Fiducia alta.
+Quasi cassa. Linea giusta.
+Quasi dentro. Prossimo colpo.
+Sul filo. Traiettoria buona.
+Linea ok, finale no. Niente panico.
+Ci torniamo. Traiettoria buona.
+Reset e avanti. Numeri dalla nostra.
+Buon segnale. Non ci fermiamo.
+Buon segnale. Si torna a spingere.
+Rifacciamola. Linea giusta.
+Linea ok, finale no. Si torna a spingere.
+Linea ok, finale no. Restiamo affilati.
+Manca l’ultimo step. Spunta mancata, prossima.
+Testa alta. Calma e lavoro.
+Sfumata sul più bello. La rotta è buona.
+Niente drammi. Focus e disciplina.
+A un niente. Resta il valore.
+A un millimetro. Bene così.
+Green sfiorato. Si ricarica e si riparte.
+Finale amaro. Step by step.
+Ancora un attimo. React & go.
+Per un soffio. Si ricarica e si riparte.
+Road to green. Subito focus.
+Non cambia la rotta. Si torna sul pezzo.
+Quasi leggenda. React & go.
+Solo dettagli. Avanti dritti.
+Ben impostata. Passo dopo passo.
+Buon segnale. Gara lunga.
+Domani meglio. Zero fronzoli, si va.
+A un passo. Si torna a spingere.
+Manca l’ultimo step. Traiettoria buona.
