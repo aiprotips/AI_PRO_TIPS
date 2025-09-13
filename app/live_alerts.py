@@ -55,12 +55,14 @@ def _has_red_card_for(team_name: str, events_resp: Dict[str, Any]) -> bool:
 
 def _safe_send(tg, chat_id: int, text: str):
     try:
-        return tg.send_message(text, chat_id=chat_id)
-    except TypeError:
+        # firma corretta: (chat_id, text)
         return tg.send_message(chat_id, text)
+    except TypeError:
+        # fallback: (text, chat_id=...)
+        return tg.send_message(text, chat_id=chat_id)
     except Exception:
         try:
-            return tg.send_message(text, chat_id=chat_id)
+            return tg.send_message(chat_id, text)
         except Exception:
             pass
 
@@ -73,6 +75,8 @@ class LiveAlerts:
         self.watch: Dict[int, Dict[str, Any]] = {}
         self.pending_check: Dict[int, float] = {}
         self.alerted: set[int] = set()
+        # NEW: polling configurabile da ENV, fallback a costante
+        self.poll_seconds = int(getattr(cfg, "LIVE_POLL_SECONDS", POLL_SECONDS))
 
     def _now_local(self) -> datetime:
         return datetime.now(self.tz)
@@ -220,4 +224,4 @@ class LiveAlerts:
     def run_forever(self):
         while True:
             self.tick()
-            time.sleep(POLL_SECONDS)
+            time.sleep(self.poll_seconds)
