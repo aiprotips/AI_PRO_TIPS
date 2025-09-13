@@ -1,4 +1,4 @@
-# app/main.py — aggiunta disable webhook al boot
+# app/main.py — aggiunta disable webhook al boot + thread scheduler 08:00
 import threading
 import time
 from datetime import datetime, timedelta
@@ -10,6 +10,9 @@ from .telegram_client import TelegramClient
 from .api_football import APIFootball
 from .commands import CommandsLoop
 from .live_alerts import LiveAlerts  # nuovo modulo per gli alert
+
+# NEW: import per il job mattutino
+from .morning_job import run_morning
 
 def main():
     cfg = Config()
@@ -23,8 +26,6 @@ def main():
         pass
 
     print("[BOOT] Odds bot pronto. Comandi: /quote [today|tomorrow], /plan, live alerts ON")
-
-    # ... (il resto del tuo main rimane uguale) ...
 
     # --- Loop comandi (DM admin) ---
     cmd_loop = CommandsLoop(cfg, tg, api)
@@ -70,10 +71,26 @@ def main():
                 print(f"[live_alerts] daily watchlist error: {e}")
                 time.sleep(10)
 
+    # NEW: Job alle 08:00 per pianificare e accodare le schedine del giorno
+    def loop_morning_scheduler():
+        tz = ZoneInfo(cfg.TZ)
+        while True:
+            try:
+                now = datetime.now(tz)
+                next_8 = now.replace(hour=8, minute=0, second=0, microsecond=0)
+                if next_8 <= now:
+                    next_8 = next_8 + timedelta(days=1)
+                time.sleep(max(1, (next_8 - now).total_seconds()))
+                run_morning(cfg, tg, api)  # genera/accoda/manda DM report admin
+            except Exception as e:
+                print(f"[morning] error: {e}")
+                time.sleep(10)
+
     # --- Avvio thread ---
     threading.Thread(target=loop_commands, daemon=True).start()
     threading.Thread(target=loop_live_alerts, daemon=True).start()
     threading.Thread(target=loop_daily_watchlist, daemon=True).start()
+    threading.Thread(target=loop_morning_scheduler, daemon=True).start()  # NEW
 
     # keep alive (il processo Railway deve restare vivo)
     while True:
