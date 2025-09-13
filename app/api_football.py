@@ -139,9 +139,9 @@ class APIFootball:
             league = e.get("league", {}) or {}
             fid = int(fixture.get("id") or 0)
             kickoff_iso = fixture.get("date") or ""
-            teams = e.get("teams", {}) or {}
-            home = (teams.get("home", {}) or {}).get("name", "Home")
-            away = (teams.get("away", {}) or {}).get("name", "Away")
+ teams = e.get("teams") or (e.get("fixture", {}).get("teams")) or {}
+home = ((teams.get("home") or {}).get("name")) or "Home"
+away = ((teams.get("away") or {}).get("name")) or "Away"
 
             bookmakers = e.get("bookmakers", []) or []
             if not bookmakers:
@@ -194,9 +194,9 @@ class APIFootball:
             fid = int(fixture.get("id") or 0)
             if not fid:
                 continue
-            teams = fx.get("teams", {}) or {}
-            home = (teams.get("home", {}) or {}).get("name", "Home")
-            away = (teams.get("away", {}) or {}).get("name", "Away")
+teams = fx.get("teams") or (fx.get("fixture", {}).get("teams")) or {}
+home = ((teams.get("home") or {}).get("name")) or "Home"
+away = ((teams.get("away") or {}).get("name")) or "Away"
             kickoff_iso = fixture.get("date") or ""
 
             oresp = self.odds_by_fixture_bet365(fid)
