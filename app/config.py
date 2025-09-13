@@ -7,6 +7,9 @@ class Config:
         self.APIFOOTBALL_KEY = os.getenv("APIFOOTBALL_KEY", "").strip()
         self.TZ = os.getenv("TZ", "Europe/Rome")
         self.PAGE_SIZE = 3500  # soft limit (Telegram 4096 chars)
+        self.CHANNEL_ID = int(os.getenv("CHANNEL_ID", "0")) or None
+# opzionale, comodo nelle CTA:
+self.PUBLIC_LINK = os.getenv("PUBLIC_LINK", "https://t.me/AIProTips")
 
         if not self.TELEGRAM_TOKEN:
             raise RuntimeError("TELEGRAM_TOKEN mancante")
