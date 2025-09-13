@@ -4,13 +4,13 @@ from typing import Dict, Any, List, Tuple
 from math import isfinite
 from .stats_engine import StatsEngine, clamp
 
-# Range quote per formato
+# Range quote per formato (prima passata "soft")
 RANGES = {
     "single":  (1.45, 1.65),
     "double":  (1.28, 1.42),
     "triple":  (1.22, 1.35),
     "quint":   (1.18, 1.30),
-    "long":    (1.10, 1.22),  # 8–10 eventi
+    "long":    (1.10, 1.22),  # 8–10–12 eventi
 }
 
 # Soglie 'value' (delta minimo vs p_imp)
@@ -31,10 +31,26 @@ SAFE_TH = {
     "long":   0.55,
 }
 
+# Ordine di "sicurezza" per fallback
 SAFE_MARKETS_ORDER = (
     "Over 1.5", "Under 3.5", "1X", "X2", "No Gol", "Over 0.5",
     "Under 2.5", "Gol", "1", "2"
 )
+
+# >>> NUOVO: minimi di quota TOTALE richiesti
+MIN_TOTAL = {
+    "quint": 4.00,  # quintupla
+    "long":  6.00,  # super combo 8–12
+}
+
+# >>> NUOVO: cap massimo per quote per-leg nel "secondo pass" (quando serve alzare)
+UPPER_CAP = {
+    "single": 1.70,
+    "double": 1.50,
+    "triple": 1.45,
+    "quint":  1.45,  # alziamo per raggiungere 4x su 5 leg
+    "long":   1.30,  # consente 8 leg a GM ~1.25 quando serve arrivare a 6x
+}
 
 def _p_imp(odd: float) -> float:
     try:
@@ -61,7 +77,7 @@ def _fav_side(markets: Dict[str, float]) -> str:
 def _adj_market(market: str, markets: Dict[str, float], feats: Dict[str, Any]) -> float:
     """
     Aggiustamento (+/-) da sommare alla probabilità implicita p_imp del mercato.
-    Bounded in [-0.12, +0.12] per non 'strappare' dai prezzi bookmaker.
+    Bounded in [-0.12, +0.12] per non strappare dai prezzi bookmaker.
     """
     h, a = feats["home"], feats["away"]
     tot_avg = _avg(h["tot_avg"], a["tot_avg"])
@@ -88,7 +104,7 @@ def _adj_market(market: str, markets: Dict[str, float], feats: Dict[str, Any]) -
         adj = 0.06*(cs_avg - 0.30) + 0.03*(0.55 - btts_avg) + 0.02*(gap - 0.12)
     elif market == "1X":
         base = 0.05*(form_h - 0.50) + 0.03*(gap - 0.12) - 0.02*(form_a - 0.50)
-        adj = base if fav == "home" else base*0.5  # se non è favorita, meno boost
+        adj = base if fav == "home" else base*0.5
     elif market == "X2":
         base = 0.05*(form_a - 0.50) + 0.03*(gap - 0.12) - 0.02*(form_h - 0.50)
         adj = base if fav == "away" else base*0.5
@@ -103,7 +119,7 @@ def _adj_market(market: str, markets: Dict[str, float], feats: Dict[str, Any]) -
 
 def _mk_candidate(entry: Dict[str, Any], market: str, feats: Dict[str, Any]) -> Dict[str, Any]:
     mk = entry["markets"]
-    if market not in mk: 
+    if market not in mk:
         return {}
     odd = float(mk[market])
     p_imp = _p_imp(odd)
@@ -137,12 +153,9 @@ def _fits_range(odd: float, lo: float, hi: float) -> bool:
 def build_daily_candidates(api, cfg, date_str: str) -> List[Dict[str, Any]]:
     """
     Restituisce una lista di candidati (uno per mercato) con p_mod e value.
-    Usa solo le leghe whitelisted: cfg.ALLOWED (label_league) se presente,
-    altrimenti presuppone che entries_by_date_bet365 sia già filtrata a monte.
+    Usa solo le leghe whitelisted (se presente .leagues.allowed_league).
     """
-    # entries già pronte da api_football (quote reali/paginate/FT only)
     entries = api.entries_by_date_bet365(date_str)
-    # opzionale: se hai un modulo leagues con filtro, usalo qui
     try:
         from .leagues import allowed_league
         entries = [e for e in entries if allowed_league(e["league_country"], e["league_name"])]
@@ -157,10 +170,8 @@ def build_daily_candidates(api, cfg, date_str: str) -> List[Dict[str, Any]]:
         try:
             feats = se.features_for_fixture(fid)
         except Exception:
-            # se stats down, salta la partita (meglio pochi ma buoni)
             continue
 
-        # Genera candidati per TUTTI i mercati che l’entry espone
         for m in ("1","X","2","1X","12","X2","Over 0.5","Over 1.5","Over 2.5","Under 2.5","Under 3.5","Gol","No Gol"):
             cand = _mk_candidate(e, m, feats)
             if cand:
@@ -188,22 +199,28 @@ def _diversify_league(picks: List[Dict[str, Any]], max_per_league: int = 3) -> L
         out.append(p)
     return out
 
-def _format_block(label: str, legs: List[Dict[str, Any]]) -> str:
+def _compute_total(legs: List[Dict[str, Any]]) -> float:
+    tot = 1.0
+    for p in legs:
+        try:
+            tot *= float(p["odd"])
+        except Exception:
+            pass
+    return round(tot, 2)
+
+def _format_block(label: str, legs: List[Dict[str, Any]], tz_str: str) -> str:
     if not legs:
         return f"<b>{label}</b>\nN/D"
     lines = [f"<b>{label}</b>"]
     for p in legs:
         lines.append(f"• {p['home']} 🆚 {p['away']} — {p['market']} <b>{p['odd']:.2f}</b>")
-    # quota totale se >1 leg
     if len(legs) > 1:
-        tot = 1.0
-        for p in legs: tot *= float(p["odd"])
-        lines.append(f"Totale: <b>{tot:.2f}</b>")
-    # kick-off più vicino
+        lines.append(f"Totale: <b>{_compute_total(legs):.2f}</b>")
+    # kickoff più vicino
     try:
         from dateutil import parser as duparser
         from zoneinfo import ZoneInfo
-        tz = ZoneInfo(getattr(cfg, "TZ", "Europe/Rome"))
+        tz = ZoneInfo(tz_str)
         first = min(legs, key=lambda x: x["kickoff_iso"])
         dt = duparser.isoparse(first["kickoff_iso"]).astimezone(tz)
         lines.append(f"🕒 {dt.strftime('%H:%M')}")
@@ -211,26 +228,129 @@ def _format_block(label: str, legs: List[Dict[str, Any]]) -> str:
         pass
     return "\n".join(lines)
 
-def _select_for_format(cands: List[Dict[str, Any]], fmt: str, n_legs: int) -> List[Dict[str, Any]]:
+def _select_base(cands: List[Dict[str, Any]], fmt: str, n_legs: int) -> List[Dict[str, Any]]:
     lo, hi = RANGES[fmt]
-    # 1) value prima
-    value_cands = [c for c in cands if _fits_range(c["odd"], lo, hi)]
+    pool = [c for c in cands if _fits_range(c["odd"], lo, hi)]
+    # 1) Value prima
+    value_cands = [c for c in pool if c["value"] >= VALUE_TH[fmt]]
     value_cands.sort(key=lambda x: (x["value"], x["p_mod"]), reverse=True)
-    picks = [c for c in value_cands if c["value"] >= VALUE_TH[fmt]][: n_legs * 2]  # shortlist
-    # 2) fallback: sicurezza
+    picks = value_cands[: n_legs * 2]
+
+    # 2) Fallback sicurezza
     if len(picks) < n_legs:
-        safe = [c for c in value_cands if c["p_mod"] >= SAFE_TH[fmt]]
-        # ordina per mercato 'più safe' prima
+        safe = [c for c in pool if c["p_mod"] >= SAFE_TH[fmt]]
         safe.sort(key=lambda x: (SAFE_MARKETS_ORDER.index(x["market"]) if x["market"] in SAFE_MARKETS_ORDER else 99, -x["p_mod"]))
         for s in safe:
             if s not in picks:
                 picks.append(s)
             if len(picks) >= n_legs * 2:
                 break
-    # 3) dedup per fixture e diversificazione lega
+
+    # 3) Dedup & diversificazione
     picks = _dedup_by_fixture(picks)
     picks = _diversify_league(picks, max_per_league=3)
     return picks[:n_legs]
+
+def _reselect_to_meet_total(cands: List[Dict[str, Any]], fmt: str, n_legs: int, min_total: float) -> List[Dict[str, Any]]:
+    """
+    Secondo pass: alza l'asticella delle quote per-leg (senza impazzire),
+    puntando a raggiungere la soglia di quota totale richiesta.
+    """
+    if n_legs <= 0:
+        return []
+
+    # Geometric mean richiesta
+    from math import pow
+    gm_needed = pow(float(min_total), 1.0 / n_legs)
+    cap_hi = UPPER_CAP.get(fmt, 1.45)
+
+    # costruiamo una pool "hi" coerente col formato
+    hi_pool = [c for c in cands if (c["odd"] >= gm_needed and c["odd"] <= cap_hi and (c["value"] >= VALUE_TH[fmt] or c["p_mod"] >= SAFE_TH[fmt]))]
+
+    # ordina prima per 'value', poi p_mod, poi odd (più alta)
+    hi_pool.sort(key=lambda x: (x["value"], x["p_mod"], x["odd"]), reverse=True)
+
+    # Dedup e diversificazione mentre selezioniamo
+    picks: List[Dict[str, Any]] = []
+    seen_fixtures = set()
+    league_cnt: Dict[str, int] = {}
+    for c in hi_pool:
+        if len(picks) >= n_legs:
+            break
+        if c["fixture_id"] in seen_fixtures:
+            continue
+        lg = c["league"]
+        if league_cnt.get(lg, 0) >= 3:
+            continue
+        seen_fixtures.add(c["fixture_id"])
+        league_cnt[lg] = league_cnt.get(lg, 0) + 1
+        picks.append(c)
+
+    # verifica totale
+    if len(picks) == n_legs and _compute_total(picks) >= min_total:
+        return picks
+
+    # Se ancora non basta, tenta greedy per alzare il totale (quote più alte)
+    # prendendo la migliore combinazione possibile dal pool.
+    # (approccio semplice: prova a sostituire elementi con altri a odd più alti)
+    improved = picks[:]
+    for i in range(len(improved)):
+        for cand in hi_pool:
+            if cand in improved:
+                continue
+            if cand["fixture_id"] in {p["fixture_id"] for p in improved}:
+                continue
+            trial = improved[:]
+            trial[i] = cand
+            # check league cap
+            from collections import Counter
+            lc = Counter([t["league"] for t in trial])
+            if any(v > 3 for v in lc.values()):
+                continue
+            if _compute_total(trial) > _compute_total(improved):
+                improved = trial
+    if len(improved) == n_legs and _compute_total(improved) >= min_total:
+        return improved
+
+    return []
+
+def _select_for_format(cands: List[Dict[str, Any]], fmt: str, n_legs: int) -> List[Dict[str, Any]]:
+    """Selezione base (value → safe) + vincoli di coerenza; NO soglia totale."""
+    return _select_base(cands, fmt, n_legs)
+
+def _select_with_min_total(cands: List[Dict[str, Any]], fmt: str, n_legs: int) -> List[Dict[str, Any]]:
+    """
+    Come _select_for_format, ma se esiste MIN_TOTAL[fmt] tenta un secondo pass per raggiungere la soglia.
+    Se non raggiungibile con materiale buono → restituisce [] (salta il formato).
+    """
+    picks = _select_for_format(cands, fmt, n_legs)
+    if not picks:
+        return []
+    need_min = MIN_TOTAL.get(fmt)
+    if not need_min:
+        return picks
+    if _compute_total(picks) >= need_min:
+        return picks
+    # secondo pass "hi-odds" controllato
+    boosted = _reselect_to_meet_total(cands, fmt, n_legs, need_min)
+    if boosted and _compute_total(boosted) >= need_min:
+        return boosted
+    # non raggiungibile senza snaturare → salta
+    return []
+
+def _select_long_with_min_total(cands: List[Dict[str, Any]], max_legs: int) -> List[Dict[str, Any]]:
+    """
+    Prova a costruire una super combo con quota totale >= MIN_TOTAL['long'].
+    Tenta prima con il numero massimo di leg, poi scende fino a 8 (se necessario).
+    Se non raggiungibile → ritorna [] (niente super combo oggi).
+    """
+    min_total = MIN_TOTAL["long"]
+    # prova dal massimo (più facile arrivare a min_total) verso 8
+    for n in range(max_legs, 7, -1):
+        picks = _select_with_min_total(cands, "long", n)
+        if picks and _compute_total(picks) >= min_total:
+            return picks
+    return []
 
 def plan_day(api, cfg, date_str: str, want_long_legs: int = 10) -> Dict[str, List[Dict[str, Any]]]:
     """
@@ -238,57 +358,59 @@ def plan_day(api, cfg, date_str: str, want_long_legs: int = 10) -> Dict[str, Lis
     - singole: 2
     - doppia: 2 legs
     - tripla: 3 legs
-    - quintupla: 5 legs
-    - long: 8–want_long_legs legs (se materiale)
+    - quintupla: 5 legs (totale >= 4.0)
+    - long: 8–want_long_legs legs (totale >= 6.0), se possibile
     """
     cands = build_daily_candidates(api, cfg, date_str)
+
     # due singole
     s1 = _select_for_format(cands, "single", 1)
-    # rimuovi fixture usate per non duplicare
     used = set(p["fixture_id"] for p in s1)
     c2 = [c for c in cands if c["fixture_id"] not in used]
     s2 = _select_for_format(c2, "single", 1)
 
+    # doppia
     used |= set(p["fixture_id"] for p in s2)
     c3 = [c for c in cands if c["fixture_id"] not in used]
     d2 = _select_for_format(c3, "double", 2)
 
+    # tripla
     used |= set(p["fixture_id"] for p in d2)
     c4 = [c for c in cands if c["fixture_id"] not in used]
     t3 = _select_for_format(c4, "triple", 3)
 
+    # quintupla (con minimo totale 4x)
     used |= set(p["fixture_id"] for p in t3)
     c5 = [c for c in cands if c["fixture_id"] not in used]
-    q5 = _select_for_format(c5, "quint", 5)
+    q5 = _select_with_min_total(c5, "quint", 5)  # se non raggiunge 4x -> []
 
-    # long 8–N
-    used |= set(p["fixture_id"] for p in q5)
+    # super combo (8–N) con minimo 6x
+    used |= set(p["fixture_id"] for p in (q5 or []))
     c6 = [c for c in cands if c["fixture_id"] not in used]
-    long = _select_for_format(c6, "long", want_long_legs)
-    if len(long) < 8:
-        long = long[:0]  # se non c'è materiale, non forziamo
+    long = _select_long_with_min_total(c6, want_long_legs)  # se non raggiunge 6x -> []
 
     return {
-        "singole": s1 + s2,     # 0..2 items (ognuna 1 leg)
+        "singole": s1 + s2,     # 0..2 items
         "doppia": d2,           # 0..2 legs
         "tripla": t3,           # 0..3 legs
-        "quintupla": q5,        # 0..5 legs
-        "long": long            # 0..8..N legs
+        "quintupla": q5,        # [] se non raggiunge x4
+        "long": long            # [] se non raggiunge x6
     }
 
 def render_plan_blocks(api, cfg, plan: Dict[str, List[Dict[str, Any]]]) -> List[str]:
+    tz_str = getattr(cfg, "TZ", "Europe/Rome")
     blocks: List[str] = []
     singles = plan["singole"]
     if singles:
         for idx, s in enumerate(singles, start=1):
-            blocks.append(_format_block(f"🔎 <b>SINGOLA {idx}</b>", [s]))
+            blocks.append(_format_block(f"🔎 <b>SINGOLA {idx}</b>", [s], tz_str))
     if plan["doppia"]:
-        blocks.append(_format_block("🧩 <b>DOPPIA</b>", plan["doppia"]))
+        blocks.append(_format_block("🧩 <b>DOPPIA</b>", plan["doppia"], tz_str))
     if plan["tripla"]:
-        blocks.append(_format_block("🎻 <b>TRIPLA</b>", plan["tripla"]))
+        blocks.append(_format_block("🎻 <b>TRIPLA</b>", plan["tripla"], tz_str))
     if plan["quintupla"]:
-        blocks.append(_format_block("🎬 <b>QUINTUPLA</b>", plan["quintupla"]))
+        blocks.append(_format_block("🎬 <b>QUINTUPLA</b>", plan["quintupla"], tz_str))
     if plan["long"]:
         title = f"💎 <b>SUPER COMBO x{len(plan['long'])}</b>"
-        blocks.append(_format_block(title, plan["long"]))
+        blocks.append(_format_block(title, plan["long"], tz_str))
     return blocks
