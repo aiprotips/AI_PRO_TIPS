@@ -28,15 +28,35 @@ class APIFootball:
             raise RuntimeError(f"API-Football error {r.status_code}: {r.text}")
         return r.json()
 
+    def _get_paged(self, path: str, base_params: Dict[str, Any]) -> List[Dict]:
+        """
+        Scarica tutte le pagine di un endpoint API-Football che usa 'paging'.
+        Ritorna la lista combinata di 'response'.
+        """
+        page = 1
+        out: List[Dict] = []
+        while True:
+            params = dict(base_params)
+            params["page"] = page
+            js = self._get(path, params)
+            resp = js.get("response", []) or []
+            out.extend(resp)
+            paging = js.get("paging", {}) or {}
+            cur = int(paging.get("current") or page)
+            tot = int(paging.get("total") or page)
+            if cur >= tot:
+                break
+            page += 1
+        return out
+
     # -------- Odds per data (Bet365) --------
     def odds_by_date_bet365(self, date: str) -> List[Dict]:
-        js = self._get("/odds", {"date": date, "bookmaker": BET365_ID})
-        return js.get("response", []) or []
+        # /odds?date=... è paginato → usa _get_paged
+        return self._get_paged("/odds", {"date": date, "bookmaker": BET365_ID})
 
-    # -------- Fixtures per data --------
+    # -------- Fixtures per data (paginato) --------
     def fixtures_by_date(self, date: str) -> List[Dict]:
-        js = self._get("/fixtures", {"date": date})
-        return js.get("response", []) or []
+        return self._get_paged("/fixtures", {"date": date})
 
     # -------- Odds per fixture (Bet365) --------
     def odds_by_fixture_bet365(self, fixture_id: int) -> List[Dict]:
@@ -156,38 +176,39 @@ class APIFootball:
     # -------- Fallback robusto via fixtures --------
     def entries_by_date_bet365(self, date: str) -> List[Dict]:
         """
-        Prova /odds?date=... (Bet365); se vuoto, fallback:
-        - /fixtures?date=...  -> per ogni fixture chiama /odds?fixture=...&bookmaker=8
+        Prova /odds?date=... (Bet365) con paginazione; se vuoto, fallback:
+        - /fixtures?date=... (paginazione) -> per ogni fixture: /odds?fixture=...&bookmaker=8
         - Assembla entries nel formato già usato da parse_odds_entries
         """
         odds_entries = self.odds_by_date_bet365(date)
-        if odds_entries:
-            return self.parse_odds_entries(odds_entries)
+        parsed_from_odds = self.parse_odds_entries(odds_entries)
+        if parsed_from_odds:
+            return parsed_from_odds
 
-        # fallback via fixtures
+        # fallback via fixtures (paginato)
         fixtures = self.fixtures_by_date(date)
         out = []
         for fx in fixtures:
-            fid = int((fx.get("fixture", {}) or {}).get("id") or 0)
+            fixture = fx.get("fixture", {}) or {}
             league = fx.get("league", {}) or {}
+            fid = int(fixture.get("id") or 0)
+            if not fid:
+                continue
             teams = fx.get("teams", {}) or {}
             home = (teams.get("home", {}) or {}).get("name", "Home")
             away = (teams.get("away", {}) or {}).get("name", "Away")
-            kickoff_iso = (fx.get("fixture", {}) or {}).get("date") or ""
+            kickoff_iso = fixture.get("date") or ""
 
             oresp = self.odds_by_fixture_bet365(fid)
-            if not oresp:
-                continue
-            # oresp è come odds_by_fixture → parse come parse_odds_entries
+            # combina i bookmakers (dovrebbe esserci solo Bet365)
             bookmakers = []
             for e in oresp:
-                for bm in e.get("bookmakers", []) or []:
-                    # basta il primo; è già Bet365
+                for bm in (e.get("bookmakers") or []):
                     bookmakers = [bm]; break
-                if bookmakers:
-                    break
+                if bookmakers: break
             if not bookmakers:
                 continue
+
             markets = self._parse_market_block(bookmakers[0].get("bets", []) or [])
             if not markets:
                 continue
