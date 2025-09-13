@@ -1,7 +1,6 @@
-# app/repo_sched.py
 import os
 import pymysql
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote  # <-- unquote aggiunto
 from contextlib import contextmanager
 
 # Tabella di scheduling indipendente dalle tabelle delle schedine/eventi che hai già
@@ -21,8 +20,8 @@ def _parse_mysql_url(url: str):
     return {
         "host": u.hostname,
         "port": int(u.port or 3306),
-        "user": u.username,
-        "password": u.password or "",
+        "user": unquote(u.username) if u.username else "",      # <-- decode
+        "password": unquote(u.password) if u.password else "",  # <-- decode
         "db": (u.path or "/")[1:] or "railway",
         "charset": "utf8mb4",
         "cursorclass": pymysql.cursors.DictCursor,
