@@ -51,7 +51,6 @@ class APIFootball:
 
     # -------- Odds per data (Bet365) --------
     def odds_by_date_bet365(self, date: str) -> List[Dict]:
-        # /odds?date=... è paginato → usa _get_paged
         return self._get_paged("/odds", {"date": date, "bookmaker": BET365_ID})
 
     # -------- Fixtures per data (paginato) --------
@@ -66,7 +65,8 @@ class APIFootball:
     # -------- Helpers parsing --------
     @staticmethod
     def _put(out: Dict[str, float], key: str, val):
-        if val is None: return
+        if val is None: 
+            return
         try:
             x = float(val)
         except:
@@ -139,9 +139,11 @@ class APIFootball:
             league = e.get("league", {}) or {}
             fid = int(fixture.get("id") or 0)
             kickoff_iso = fixture.get("date") or ""
- teams = e.get("teams") or (e.get("fixture", {}).get("teams")) or {}
-home = ((teams.get("home") or {}).get("name")) or "Home"
-away = ((teams.get("away") or {}).get("name")) or "Away"
+
+            # Nomi squadra robusti: e["teams"] oppure fixture["teams"]
+            teams = e.get("teams") or (fixture.get("teams") or {})
+            home = ((teams.get("home") or {}).get("name")) or "Home"
+            away = ((teams.get("away") or {}).get("name")) or "Away"
 
             bookmakers = e.get("bookmakers", []) or []
             if not bookmakers:
@@ -194,13 +196,14 @@ away = ((teams.get("away") or {}).get("name")) or "Away"
             fid = int(fixture.get("id") or 0)
             if not fid:
                 continue
-teams = fx.get("teams") or (fx.get("fixture", {}).get("teams")) or {}
-home = ((teams.get("home") or {}).get("name")) or "Home"
-away = ((teams.get("away") or {}).get("name")) or "Away"
+
+            # Nomi squadra robusti anche qui
+            teams = fx.get("teams") or (fixture.get("teams") or {})
+            home = ((teams.get("home") or {}).get("name")) or "Home"
+            away = ((teams.get("away") or {}).get("name")) or "Away"
             kickoff_iso = fixture.get("date") or ""
 
             oresp = self.odds_by_fixture_bet365(fid)
-            # combina i bookmakers (dovrebbe esserci solo Bet365)
             bookmakers = []
             for e in oresp:
                 for bm in (e.get("bookmakers") or []):
