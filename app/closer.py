@@ -1,4 +1,4 @@
-# app/closer.p
+# app/closer.py
 from __future__ import annotations
 import time
 from typing import Dict, Any, List, Tuple
@@ -15,14 +15,20 @@ from .templates_schedine import render_live_energy, render_celebration_singola, 
 # ------- helper invio a prova di firma -------
 def _send(tg: TelegramClient, chat_id: int, text: str):
     try:
-        return tg.send_message(text, chat_id=chat_id)
+        return tg.send_message(chat_id, text)  # firma corretta
     except TypeError:
-        return tg.send_message(chat_id, text)
+        return tg.send_message(text, chat_id=chat_id)  # fallback
     except Exception:
         try:
-            return tg.send_message(text, chat_id=chat_id)
+            return tg.send_message(chat_id, text)
         except Exception:
             pass
+
+def _channel_id(cfg) -> int | None:
+    try:
+        return int(getattr(cfg, "CHANNEL_ID", None)) if getattr(cfg, "CHANNEL_ID", None) is not None else None
+    except Exception:
+        return None
 
 # ------- risoluzione mercato -------
 def _resolve_market(market: str, gh: int, ga: int, finished: bool) -> str:
@@ -98,9 +104,11 @@ class Closer:
         elif m == "No Gol": line = "No Gol sulla linea. ✅"
         elif m == "Gol": line = "Gol in traiettoria. ✅"
         if line:
-            msg = render_live_energy(home, away, minute, line, str(b["id"]))
-            _send(self.tg, int(self.cfg.CHANNEL_ID), msg)
-            self.energy_sent.add(s["id"])
+            ch = _channel_id(self.cfg)
+            if ch is not None:
+                msg = render_live_energy(home, away, minute, line, str(b["id"]))
+                _send(self.tg, ch, msg)
+                self.energy_sent.add(s["id"])
 
     def tick(self):
         if not self._live_ok():
@@ -139,6 +147,9 @@ class Closer:
                     if bid in self.final_sent:
                         continue
                     self.final_sent.add(bid)
+                    ch = _channel_id(self.cfg)
+                    if ch is None:
+                        continue
                     if status == "WON":
                         if int(b.get("legs_count", 0)) <= 1:
                             # singola
@@ -150,7 +161,7 @@ class Closer:
                             except Exception:
                                 score = ""
                             msg = render_celebration_singola(s0["home"], s0["away"], score, s0["market"], float(s0["odd"]), getattr(self.cfg, "PUBLIC_LINK", "https://t.me/AIProTips"))
-                            _send(self.tg, int(self.cfg.CHANNEL_ID), msg)
+                            _send(self.tg, ch, msg)
                         else:
                             # multipla
                             summary = []
@@ -163,7 +174,7 @@ class Closer:
                                     score = ""
                                 summary.append({"home": s["home"], "away": s["away"], "pick": s["market"], "score": score})
                             msg = render_celebration_multipla(summary, float(b["total_odds"]), getattr(self.cfg, "PUBLIC_LINK", "https://t.me/AIProTips"))
-                            _send(self.tg, int(self.cfg.CHANNEL_ID), msg)
+                            _send(self.tg, ch, msg)
                     else:
                         # persa: 1 sola leg → "quasi", altrimenti "cuori"
                         sels2 = get_selections(bid)
@@ -171,9 +182,9 @@ class Closer:
                         if len(lost) == 1:
                             missed = lost[0]
                             line = f"{missed['home']}–{missed['away']} ({missed['market']})"
-                            _send(self.tg, int(self.cfg.CHANNEL_ID), render_quasi_vincente(line))
+                            _send(self.tg, ch, render_quasi_vincente(line))
                         else:
-                            _send(self.tg, int(self.cfg.CHANNEL_ID), render_cuori_spezzati())
+                            _send(self.tg, ch, render_cuori_spezzati())
 
     def run_forever(self):
         while True:
