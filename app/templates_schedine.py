@@ -42,7 +42,7 @@ _FALLBACK = {
     ]
   },
 
-  # Live alert (favorite ≤1.26 pre-match, sotto entro 20' senza rosso)
+  # Live alert
   "live_alert": {
     "title": "⚡ <b>LIVE ALERT</b> ⚡",
     "body": "⏱️ {minute}’ — {fav} è sotto contro {other}.\nQuota pre: {preodd} | Quota live: {odds_str}",
@@ -54,7 +54,7 @@ _FALLBACK = {
     ]
   },
 
-  # Live energy (micromessaggi per selezioni ancora vive)
+  # Live energy
   "live_energy": {
     "format": "⏱️ {minute}’ — {home}–{away}: {line}  (#{sid})"
   },
@@ -90,7 +90,7 @@ _FALLBACK = {
     ]
   },
 
-  # Cuori spezzati (saltata male)
+  # Cuori spezzati
   "heartbreak": {
     "title": "💔 <b>CUORI SPEZZATI</b>",
     "line_pool": [
@@ -101,21 +101,7 @@ _FALLBACK = {
     ]
   },
 
-  # Statistica lampo
-  "stat_flash": {
-    "wrap": "📊 <b>STATISTICA LAMPO</b>\n\n{line}",
-    "phrase_pool": [
-      "{HOME} ha segnato in 4 delle ultime 5: trazione offensiva.",
-      "{AWAY} concede almeno 1 gol nel 70% delle ultime: finestra Over.",
-      "{HOME} imbattuta in casa da 6 gare: linea 1X sotto controllo.",
-      "H2H favorevole: trend che spinge il nostro pick."
-    ],
-    "coherence_hint": [
-      "Linea coerente con la scelta, numeri dalla nostra parte."
-    ]
-  },
-
-  # Storytelling (corposo)
+  # Storytelling
   "story": {
     "title_pool": [
       "Il colpo facile",
@@ -124,13 +110,13 @@ _FALLBACK = {
       "Qui si vince col ritmo"
     ],
     "long_body_pool": [
-      "Non è solo una sensazione: i numeri parlano chiaro, l’inerzia è dalla nostra. Gestione dei momenti e lettura tattica: la scelta diventa naturale. 🔥",
-      "La narrativa dice equilibrio, i dati raccontano un’altra storia: intensità, continuità e struttura. Da qui si passa per fare risultato. 🚀",
-      "Quando forma e trend si allineano, la value non è un’opinione. Campo, condizione e testa: il mix giusto per andare a segno. 🎯"
+      "Non è solo una sensazione: i numeri parlano chiaro, l’inerzia è dalla nostra. 🔥",
+      "La narrativa dice equilibrio, i dati raccontano un’altra storia: intensità, continuità e struttura. 🚀",
+      "Quando forma e trend si allineano, la value non è un’opinione. 🎯"
     ]
   },
 
-  # Banter (trash talk leggero)
+  # Banter
   "banter": {
     "pool": [
       "La value oggi è tutta dalla nostra parte. 🚀",
@@ -141,15 +127,16 @@ _FALLBACK = {
   }
 }
 
-# Mappatura file in /phrasi -> nodi del dizionario
+# ------------------------------
+# Mappatura file esterni /phrasi
+# ------------------------------
 _PHRASES_MAPPING = {
   "cassa.txt": ("celebrations.title_pool",),
   "quasi.txt": ("almost_win.title_pool", "almost_win.motivation_pool"),
   "cuori.txt": ("heartbreak.line_pool",),
   "banter.txt": ("banter.pool",),
   "story_title.txt": ("story.title_pool",),
-  "story_body.txt": ("story.long_body_pool",),
-  "stat_templates.txt": ("stat_flash.phrase_pool",)
+  "story_body.txt": ("story.long_body_pool",)
 }
 
 def _file_lines(path: str):
@@ -291,15 +278,6 @@ def render_cuori_spezzati() -> str:
     title = _get("heartbreak.title") or _FALLBACK["heartbreak"]["title"]
     line = _choice("heartbreak.line_pool") or _FALLBACK["heartbreak"]["line_pool"][0]
     return f"{title}\n\n{line}"
-
-def render_stat_flash(home: str, away: str, line_override: str = None) -> str:
-    if line_override:
-        line = line_override
-    else:
-        phrase = _choice("stat_flash.phrase_pool")
-        line = (phrase or "").replace("{HOME}", home).replace("{AWAY}", away)
-    wrap = _get("stat_flash.wrap") or _FALLBACK["stat_flash"]["wrap"]
-    return wrap.format(line=line)
 
 def render_story_long(home: str, away: str) -> str:
     title = _choice("story.title_pool") or _FALLBACK["story"]["title_pool"][0]
