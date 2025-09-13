@@ -1,4 +1,4 @@
-# app/templates_schedine.py
+# app/templates_schedine.p
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
