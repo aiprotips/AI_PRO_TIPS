@@ -1,3 +1,4 @@
+# app/commands.py
 from typing import Dict, Any, List
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -7,6 +8,9 @@ from .config import Config
 from .telegram_client import TelegramClient
 from .api_football import APIFootball
 from .leagues import allowed_league, label_league
+
+# nuovi import per il planner
+from .value_builder import plan_day, render_plan_blocks
 
 def _to_local_hhmm(iso: str, tz: str) -> str:
     try:
@@ -71,8 +75,9 @@ class CommandsLoop:
 
     def _send_paginated(self, chat_id: int, blocks: List[str]):
         page = []; total_len = 0
+        page_size = getattr(self.cfg, "PAGE_SIZE", 3500)
         for b in blocks:
-            if total_len + len(b) + 2 > self.cfg.PAGE_SIZE:
+            if total_len + len(b) + 2 > page_size:
                 if page:
                     self.tg.send_message(chat_id, "\n\n".join(page))
                 page = [b]; total_len = len(b) + 2
@@ -97,6 +102,33 @@ class CommandsLoop:
             blocks_tom = _render_day(self.api, self.cfg, tomorrow)
             self._send_paginated(chat_id, [f"<b>OGGI {today}</b>"] + blocks_today + [f"<b>DOMANI {tomorrow}</b>"] + blocks_tom)
 
+    def _handle_plan(self, chat_id: int, publish: bool = False, when: str = "today"):
+        now = datetime.now(ZoneInfo(self.cfg.TZ)).date()
+        date_str = (now if when == "today" else (now + timedelta(days=1))).strftime("%Y-%m-%d")
+
+        try:
+            plan = plan_day(self.api, self.cfg, date_str, want_long_legs=10)
+        except Exception as e:
+            self.tg.send_message(chat_id, f"❌ Errore planner: {e}")
+            return
+
+        blocks = render_plan_blocks(self.api, self.cfg, plan)
+        if not blocks:
+            self.tg.send_message(chat_id, f"Nessuna giocata valida per {date_str}.")
+            return
+
+        # preview in DM
+        self._send_paginated(chat_id, [f"<b>PLAN {date_str}</b>"] + blocks)
+
+        # publish se richiesto
+        if publish:
+            channel_id = getattr(self.cfg, "CHANNEL_ID", None)
+            if not channel_id:
+                self.tg.send_message(chat_id, "⚠️ CHANNEL_ID non configurato: salto pubblicazione.")
+                return
+            for b in blocks:
+                self.tg.send_message(channel_id, b)
+
     def handle_update(self, upd: Dict[str, Any]):
         msg = upd.get("message") or upd.get("edited_message")
         if not msg:
@@ -112,17 +144,32 @@ class CommandsLoop:
 
         low = text.lower()
         if low.startswith("/start"):
-            self.tg.send_message(chat_id, "Benvenuto! Usa /quote per le quote Bet365 (oggi+domani)."); return
+            self.tg.send_message(chat_id, "Benvenuto! /quote per quote Bet365, /plan per anteprima giocate."); return
         if low.startswith("/help"):
-            self.tg.send_message(chat_id, "Comandi: /quote [today|tomorrow]"); return
+            self.tg.send_message(chat_id, "Comandi: /quote [today|tomorrow|all], /plan [today|tomorrow], /plan_publish [today|tomorrow]"); return
         if low.startswith("/ping"):
             self.tg.send_message(chat_id, "pong ✅"); return
+
         if low.startswith("/quote"):
             parts = text.split()
             mode = parts[1].lower() if len(parts)>=2 else "all"
             if mode not in ("today","tomorrow","all"):
                 mode = "all"
             self._handle_quote(chat_id, mode); return
+
+        if low.startswith("/plan_publish"):
+            parts = text.split()
+            when = parts[1].lower() if len(parts)>=2 else "today"
+            if when not in ("today","tomorrow"):
+                when = "today"
+            self._handle_plan(chat_id, publish=True, when=when); return
+
+        if low.startswith("/plan"):
+            parts = text.split()
+            when = parts[1].lower() if len(parts)>=2 else "today"
+            if when not in ("today","tomorrow"):
+                when = "today"
+            self._handle_plan(chat_id, publish=False, when=when); return
 
         self.tg.send_message(chat_id, "Comando non riconosciuto. Usa /help")
 
