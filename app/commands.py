@@ -14,8 +14,9 @@ from .value_builder import plan_day, render_plan_blocks
 
 # --- PATCH: repo scheduler & planner/watchlist ---
 from .repo_sched import list_today, cancel_by_short_id, cancel_all_today  # patch
-from .planner import DailyPlanner                                         # patch
+# from .planner import DailyPlanner                                         # patch  (rimosso: unificato su value_builder)
 from .live_alerts import LiveAlerts                                       # patch
+from .morning_job import run_morning                                      # NEW: per /regen
 
 def _to_local_hhmm(iso: str, tz: str) -> str:
     try:
@@ -78,15 +79,15 @@ class CommandsLoop:
     # ---------- PATCH: invio compatibile con entrambe le firme ----------
     def _send(self, chat_id: int, text: str):
         try:
-            # firma: (text, chat_id=...)
-            return self.tg.send_message(text, chat_id=chat_id)
-        except TypeError:
-            # fallback: (chat_id, text)
+            # firma corretta: (chat_id, text)
             return self.tg.send_message(chat_id, text)
+        except TypeError:
+            # fallback: (text, chat_id=...)
+            return self.tg.send_message(text, chat_id=chat_id)
         except Exception:
-            # ultima difesa: prova anche senza parse_mode ecc (se client li impone)
+            # ultima difesa
             try:
-                return self.tg.send_message(text, chat_id=chat_id)
+                return self.tg.send_message(chat_id, text)
             except Exception:
                 pass
     # --------------------------------------------------------------------
@@ -229,10 +230,11 @@ class CommandsLoop:
             self._send(chat_id, "✅ Annullata." if n > 0 else "❌ ID non trovato o già inviata."); return
 
         if low.startswith("/regen"):
+            # Rigenera la pianificazione del giorno usando la stessa pipeline del job delle 08:00
             try:
-                planner = DailyPlanner(self.cfg, self.tg, self.api, None)
-                planner.run_08_tasks()
-                self._send(chat_id, "🔧 Pianificazione del giorno rigenerata (con report).")
+                # Usa il job ufficiale (identico a quello schedulato), con DM report automatico
+                run_morning(self.cfg, self.tg, self.api)
+                self._send(chat_id, "🔧 Pianificazione del giorno rigenerata (value_builder) e accodata.")
             except Exception as e:
                 self._send(chat_id, f"Errore rigenerazione: {e}")
             return
