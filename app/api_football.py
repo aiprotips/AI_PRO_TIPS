@@ -14,6 +14,9 @@ REQUIRED_MARKETS = (
     "Gol","No Gol"
 )
 
+# parole che indicano mercati parziali (da escludere)
+_EXCLUDE_PARTIAL = ("half", "period", "1st", "2nd", "first half", "second half")
+
 class APIFootball:
     def __init__(self, api_key: str, tz: str = "Europe/Rome"):
         self.base = "https://v3.football.api-sports.io"
@@ -29,10 +32,6 @@ class APIFootball:
         return r.json()
 
     def _get_paged(self, path: str, base_params: Dict[str, Any]) -> List[Dict]:
-        """
-        Scarica tutte le pagine di un endpoint API-Football che usa 'paging'.
-        Ritorna la lista combinata di 'response'.
-        """
         page = 1
         out: List[Dict] = []
         while True:
@@ -65,7 +64,7 @@ class APIFootball:
     # -------- Helpers parsing --------
     @staticmethod
     def _put(out: Dict[str, float], key: str, val):
-        if val is None: 
+        if val is None:
             return
         try:
             x = float(val)
@@ -77,37 +76,39 @@ class APIFootball:
             out[key] = x
 
     @staticmethod
+    def _is_partial(name: str) -> bool:
+        return any(tok in name for tok in _EXCLUDE_PARTIAL)
+
+    @staticmethod
     def _parse_market_block(bets: List[Dict]) -> Dict[str, float]:
         out: Dict[str, float] = {}
         for bet in bets:
-            name = (bet.get("name","") or "").lower()
+            raw_name = (bet.get("name","") or "")
+            name = raw_name.lower().strip()
             vals = bet.get("values", []) or []
 
-            if "match winner" in name or name == "winner":
+            # salta mercati parziali (HT, 1st Half, 2nd Half, periods, ecc.)
+            if APIFootball._is_partial(name):
+                continue
+
+            # 1X2 full-time
+            if name == "match winner" or name == "winner":
                 for v in vals:
                     val = (v.get("value","") or "").lower(); odd = v.get("odd")
                     if val.startswith("home") or val == "1": APIFootball._put(out, "1", odd)
                     elif val.startswith("away") or val == "2": APIFootball._put(out, "2", odd)
                     elif val.startswith("draw") or val == "x": APIFootball._put(out, "X", odd)
 
-            elif "double chance" in name:
+            # Double Chance FT
+            elif name == "double chance":
                 for v in vals:
                     lab = (v.get("value","") or "").lower(); odd = v.get("odd")
-                    if "home/draw" in lab or lab in ("1x", "home or draw"): APIFootball._put(out, "1X", odd)
+                    if "home/draw" in lab or lab in ("1x","home or draw"): APIFootball._put(out, "1X", odd)
                     elif "home/away" in lab or lab == "12" or "home or away" in lab: APIFootball._put(out, "12", odd)
-                    elif "draw/away" in lab or lab in ("x2", "draw or away"): APIFootball._put(out, "X2", odd)
+                    elif "draw/away" in lab or lab in ("x2","draw or away","away or draw"): APIFootball._put(out, "X2", odd)
 
-            elif "draw no bet" in name:
-                # non richiesto
-                pass
-
-            elif "both teams to score" in name or "goal/no goal" in name:
-                for v in vals:
-                    lab = (v.get("value","") or "").lower(); odd = v.get("odd")
-                    if "yes" in lab: APIFootball._put(out, "Gol", odd)
-                    elif "no" in lab: APIFootball._put(out, "No Gol", odd)
-
-            elif "goals over/under" in name or "total" in name:
+            # Totali full-time
+            elif name in ("goals over/under", "total"):
                 for v in vals:
                     lab = (v.get("value","") or "").lower().replace(" ", ""); odd = v.get("odd")
                     if lab in ("over0.5","o0.5"): APIFootball._put(out, "Over 0.5", odd)
@@ -116,7 +117,18 @@ class APIFootball:
                     elif lab in ("under2.5","u2.5"): APIFootball._put(out, "Under 2.5", odd)
                     elif lab in ("under3.5","u3.5"): APIFootball._put(out, "Under 3.5", odd)
 
-        # Solo i mercati richiesti
+            # Gol/No Gol (BTTS) FT
+            elif name in ("both teams to score", "goal/no goal"):
+                for v in vals:
+                    lab = (v.get("value","") or "").lower(); odd = v.get("odd")
+                    if "yes" in lab: APIFootball._put(out, "Gol", odd)
+                    elif "no"  in lab: APIFootball._put(out, "No Gol", odd)
+
+            # Draw No Bet (non richiesto) -> ignoriamo
+            else:
+                continue
+
+        # Solo i mercati richiesti nell'ordine voluto
         return {k: out[k] for k in REQUIRED_MARKETS if k in out}
 
     def parse_odds_entries(self, entries: List[Dict]) -> List[Dict]:
@@ -140,10 +152,21 @@ class APIFootball:
             fid = int(fixture.get("id") or 0)
             kickoff_iso = fixture.get("date") or ""
 
-            # Nomi squadra robusti: e["teams"] oppure fixture["teams"]
+            # Nomi squadra robusti: e["teams"] oppure fixture["teams"]; se mancano ancora, chiama fixture_by_id
             teams = e.get("teams") or (fixture.get("teams") or {})
-            home = ((teams.get("home") or {}).get("name")) or "Home"
-            away = ((teams.get("away") or {}).get("name")) or "Away"
+            home = ((teams.get("home") or {}).get("name"))
+            away = ((teams.get("away") or {}).get("name"))
+            if not home or not away:
+                try:
+                    fx = self._get("/fixtures", {"id": fid}).get("response", []) or []
+                    if fx:
+                        fteams = (fx[0].get("teams") or {})
+                        home = home or ((fteams.get("home") or {}).get("name"))
+                        away = away or ((fteams.get("away") or {}).get("name"))
+                except Exception:
+                    pass
+            home = home or "Home"
+            away = away or "Away"
 
             bookmakers = e.get("bookmakers", []) or []
             if not bookmakers:
@@ -175,7 +198,6 @@ class APIFootball:
             })
         return out
 
-    # -------- Fallback robusto via fixtures --------
     def entries_by_date_bet365(self, date: str) -> List[Dict]:
         """
         Prova /odds?date=... (Bet365) con paginazione; se vuoto, fallback:
@@ -187,7 +209,6 @@ class APIFootball:
         if parsed_from_odds:
             return parsed_from_odds
 
-        # fallback via fixtures (paginato)
         fixtures = self.fixtures_by_date(date)
         out = []
         for fx in fixtures:
@@ -197,7 +218,6 @@ class APIFootball:
             if not fid:
                 continue
 
-            # Nomi squadra robusti anche qui
             teams = fx.get("teams") or (fixture.get("teams") or {})
             home = ((teams.get("home") or {}).get("name")) or "Home"
             away = ((teams.get("away") or {}).get("name")) or "Away"
