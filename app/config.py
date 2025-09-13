@@ -33,6 +33,10 @@ class Config:
         except Exception:
             self.QUIET_HOURS = (0, 8)
 
+        # === NEW: esponi le URL DB per i check in main.py ===
+        self.DATABASE_URL = os.getenv("DATABASE_URL", "").strip() or None
+        self.MYSQL_URL = os.getenv("MYSQL_URL", "").strip() or None
+
         # Sanity checks minimi
         if not self.TELEGRAM_TOKEN:
             raise RuntimeError("TELEGRAM_TOKEN mancante")
