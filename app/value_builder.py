@@ -1,55 +1,55 @@
 # app/value_builder.py
 from __future__ import annotations
 from typing import Dict, Any, List, Tuple
-from math import isfinite
+from math import pow
+from collections import Counter
 from .stats_engine import StatsEngine, clamp
 
-# Range quote per formato (prima passata "soft")
+# -------------------------
+# Range quote per formato
+# -------------------------
 RANGES = {
     "single":  (1.45, 1.65),
     "double":  (1.28, 1.42),
     "triple":  (1.22, 1.35),
     "quint":   (1.18, 1.30),
-    "long":    (1.10, 1.22),  # 8–10–12 eventi
+    "long":    (1.10, 1.22),  # 8–12 eventi
 }
 
 # Soglie 'value' (delta minimo vs p_imp)
-VALUE_TH = {
-    "single": 0.06,
-    "double": 0.04,
-    "triple": 0.03,
-    "quint":  0.02,
-    "long":   0.01,
-}
+VALUE_TH = {"single":0.06, "double":0.04, "triple":0.03, "quint":0.02, "long":0.01}
 
 # Soglie fallback 'sicurezza' se non c'è value
-SAFE_TH = {
-    "single": 0.75,
-    "double": 0.70,
-    "triple": 0.65,
-    "quint":  0.60,
-    "long":   0.55,
-}
+SAFE_TH  = {"single":0.75, "double":0.70, "triple":0.65, "quint":0.60, "long":0.55}
 
 # Ordine di "sicurezza" per fallback
-SAFE_MARKETS_ORDER = (
-    "Over 1.5", "Under 3.5", "1X", "X2", "No Gol", "Over 0.5",
-    "Under 2.5", "Gol", "1", "2"
-)
+SAFE_MARKETS_ORDER = ("Over 1.5","Under 3.5","1X","X2","No Gol","Over 0.5","Under 2.5","Gol","1","2")
 
-# >>> NUOVO: minimi di quota TOTALE richiesti
-MIN_TOTAL = {
-    "quint": 4.00,  # quintupla
-    "long":  6.00,  # super combo 8–12
-}
+# Minimi di quota TOTALE richiesti
+MIN_TOTAL = {"quint": 4.00, "long": 6.00}
 
-# >>> NUOVO: cap massimo per quote per-leg nel "secondo pass" (quando serve alzare)
-UPPER_CAP = {
-    "single": 1.70,
-    "double": 1.50,
-    "triple": 1.45,
-    "quint":  1.45,  # alziamo per raggiungere 4x su 5 leg
-    "long":   1.30,  # consente 8 leg a GM ~1.25 quando serve arrivare a 6x
+# Cap massimo per quote per-leg nel "secondo pass" (quando serve alzare)
+UPPER_CAP = {"single":1.70,"double":1.50,"triple":1.45,"quint":1.45,"long":1.30}
+
+# -------------------------
+# CATEGORIE per la VARIANZA
+# -------------------------
+def market_category(m: str) -> str:
+    m = m.strip()
+    if m in ("1","2"):                 return "outright"
+    if m in ("1X","12","X2"):          return "double_chance"
+    if m in ("Over 0.5","Over 1.5","Over 2.5"): return "totals_over"
+    if m in ("Under 2.5","Under 3.5"): return "totals_under"
+    if m in ("Gol","No Gol"):          return "btts"
+    return "other"
+
+# Profili di diversità minimi per formato
+DIVERSITY_PROFILE = {
+    "single": {"min_cats": 1, "max_per_cat": 1},  # irrilevante (1 leg)
+    "double": {"min_cats": 2, "max_per_cat": 1},  # 2 categorie diverse
+    "triple": {"min_cats": 2, "max_per_cat": 2},  # evita 3x stessa cat
+    "quint":  {"min_cats": 3, "max_per_cat": 2},  # almeno 3 categorie, max 2 per cat
+    "long":   {"min_cats": 4, "max_per_cat": None}, # per long calcoliamo dinamicamente
 }
 
 def _p_imp(odd: float) -> float:
@@ -60,25 +60,18 @@ def _p_imp(odd: float) -> float:
         pass
     return 0.0
 
-def _avg(a: float, b: float) -> float:
-    return (a + b) / 2.0
+def _avg(a: float, b: float) -> float: return (a + b) / 2.0
 
 def _strength_gap(markets: Dict[str, float]) -> float:
-    """Gap di forza stimato da 1 e 2 implicite."""
-    p1 = _p_imp(markets.get("1", 0.0))
-    p2 = _p_imp(markets.get("2", 0.0))
+    p1 = _p_imp(markets.get("1", 0.0)); p2 = _p_imp(markets.get("2", 0.0))
     return abs(p1 - p2)
 
 def _fav_side(markets: Dict[str, float]) -> str:
-    p1 = _p_imp(markets.get("1", 0.0))
-    p2 = _p_imp(markets.get("2", 0.0))
+    p1 = _p_imp(markets.get("1", 0.0)); p2 = _p_imp(markets.get("2", 0.0))
     return "home" if p1 >= p2 else "away"
 
 def _adj_market(market: str, markets: Dict[str, float], feats: Dict[str, Any]) -> float:
-    """
-    Aggiustamento (+/-) da sommare alla probabilità implicita p_imp del mercato.
-    Bounded in [-0.12, +0.12] per non strappare dai prezzi bookmaker.
-    """
+    """Aggiusta p_imp con stats in [-0.12, +0.12] (semplice e trasparente)."""
     h, a = feats["home"], feats["away"]
     tot_avg = _avg(h["tot_avg"], a["tot_avg"])
     btts_avg = _avg(h["btts"], a["btts"])
@@ -112,49 +105,32 @@ def _adj_market(market: str, markets: Dict[str, float], feats: Dict[str, Any]) -
         adj = 0.07*(form_h - 0.50) + 0.04*(gap - 0.12) - 0.03*(form_a - 0.50)
     elif market == "2":
         adj = 0.07*(form_a - 0.50) + 0.04*(gap - 0.12) - 0.03*(form_h - 0.50)
-    else:
-        adj = 0.0
-
     return clamp(adj, -0.12, 0.12)
 
 def _mk_candidate(entry: Dict[str, Any], market: str, feats: Dict[str, Any]) -> Dict[str, Any]:
     mk = entry["markets"]
-    if market not in mk:
-        return {}
-    odd = float(mk[market])
-    p_imp = _p_imp(odd)
-    if p_imp <= 0.0:
-        return {}
-
+    if market not in mk: return {}
+    odd = float(mk[market]); p_imp = _p_imp(odd)
+    if p_imp <= 0.0: return {}
     adj = _adj_market(market, mk, feats)
     p_mod = clamp(p_imp + adj, 0.01, 0.99)
     value = p_mod - p_imp
-
     return {
         "fixture_id": entry["fixture_id"],
         "league": f"{entry['league_country']} — {entry['league_name']}",
-        "home": entry["home"],
-        "away": entry["away"],
+        "home": entry["home"], "away": entry["away"],
         "kickoff_iso": entry["kickoff_iso"],
-        "market": market,
-        "odd": odd,
-        "p_imp": round(p_imp, 4),
-        "p_mod": round(p_mod, 4),
-        "value": round(value, 4)
+        "market": market, "odd": odd,
+        "p_imp": round(p_imp, 4), "p_mod": round(p_mod, 4), "value": round(value, 4),
+        "cat": market_category(market),
     }
 
 def _fits_range(odd: float, lo: float, hi: float) -> bool:
     try:
-        x = float(odd)
-        return lo <= x <= hi
-    except Exception:
-        return False
+        x = float(odd); return lo <= x <= hi
+    except Exception: return False
 
 def build_daily_candidates(api, cfg, date_str: str) -> List[Dict[str, Any]]:
-    """
-    Restituisce una lista di candidati (uno per mercato) con p_mod e value.
-    Usa solo le leghe whitelisted (se presente .leagues.allowed_league).
-    """
     entries = api.entries_by_date_bet365(date_str)
     try:
         from .leagues import allowed_league
@@ -164,59 +140,47 @@ def build_daily_candidates(api, cfg, date_str: str) -> List[Dict[str, Any]]:
 
     se = StatsEngine(api)
     out: List[Dict[str, Any]] = []
-
     for e in entries:
         fid = int(e["fixture_id"])
         try:
             feats = se.features_for_fixture(fid)
         except Exception:
             continue
-
         for m in ("1","X","2","1X","12","X2","Over 0.5","Over 1.5","Over 2.5","Under 2.5","Under 3.5","Gol","No Gol"):
             cand = _mk_candidate(e, m, feats)
-            if cand:
-                out.append(cand)
-
+            if cand: out.append(cand)
     return out
 
 def _dedup_by_fixture(picks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     seen = set(); out = []
     for p in picks:
         fid = int(p["fixture_id"])
-        if fid in seen:
-            continue
+        if fid in seen: continue
         seen.add(fid); out.append(p)
     return out
 
 def _diversify_league(picks: List[Dict[str, Any]], max_per_league: int = 3) -> List[Dict[str, Any]]:
-    cnt: Dict[str, int] = {}
-    out: List[Dict[str, Any]] = []
+    cnt: Dict[str, int] = {}; out: List[Dict[str, Any]] = []
     for p in picks:
         lg = p["league"]
-        if cnt.get(lg, 0) >= max_per_league:
-            continue
-        cnt[lg] = cnt.get(lg, 0) + 1
-        out.append(p)
+        if cnt.get(lg, 0) >= max_per_league: continue
+        cnt[lg] = cnt.get(lg, 0) + 1; out.append(p)
     return out
 
 def _compute_total(legs: List[Dict[str, Any]]) -> float:
     tot = 1.0
     for p in legs:
-        try:
-            tot *= float(p["odd"])
-        except Exception:
-            pass
+        try: tot *= float(p["odd"])
+        except Exception: pass
     return round(tot, 2)
 
 def _format_block(label: str, legs: List[Dict[str, Any]], tz_str: str) -> str:
-    if not legs:
-        return f"<b>{label}</b>\nN/D"
+    if not legs: return f"<b>{label}</b>\nN/D"
     lines = [f"<b>{label}</b>"]
     for p in legs:
         lines.append(f"• {p['home']} 🆚 {p['away']} — {p['market']} <b>{p['odd']:.2f}</b>")
     if len(legs) > 1:
         lines.append(f"Totale: <b>{_compute_total(legs):.2f}</b>")
-    # kickoff più vicino
     try:
         from dateutil import parser as duparser
         from zoneinfo import ZoneInfo
@@ -228,130 +192,144 @@ def _format_block(label: str, legs: List[Dict[str, Any]], tz_str: str) -> str:
         pass
     return "\n".join(lines)
 
-def _select_base(cands: List[Dict[str, Any]], fmt: str, n_legs: int) -> List[Dict[str, Any]]:
+# -------------------------
+# Diversità: vincoli
+# -------------------------
+def _enforce_diversity(sorted_pool: List[Dict[str, Any]], n_legs: int, fmt: str,
+                       day_cat_bias: Counter | None = None) -> List[Dict[str, Any]]:
+    """
+    Greedy che costruisce una schedina rispettando:
+      - dedup per fixture
+      - max_per_cat per formato
+      - min_cats (almeno N categorie diverse)
+      - cerca di non abusare della categoria più usata nel giorno (day_cat_bias)
+    """
+    profile = DIVERSITY_PROFILE[fmt]
+    max_per_cat = profile["max_per_cat"]
+    min_cats = profile["min_cats"]
+
+    if fmt == "long" and (max_per_cat is None):
+        # su long consenti ~1/3 delle legs alla stessa categoria
+        max_per_cat = max(2, (n_legs + 2)//3)
+
+    picks: List[Dict[str, Any]] = []
+    seen_fix = set()
+    cat_count = Counter()
+
+    # 1) prima pass: scegli finché non riempi, rispettando cap per cat
+    for c in sorted_pool:
+        if len(picks) >= n_legs: break
+        if c["fixture_id"] in seen_fix: continue
+        cat = c["cat"]
+        # de-prioritizza categorie abusate nel giorno
+        if day_cat_bias and day_cat_bias.get(cat, 0) > max(0, day_cat_bias.total()//3):
+            # salta se ci sono alternative: guarderemo dopo se necessario
+            continue
+        if max_per_cat and cat_count[cat] >= max_per_cat:
+            continue
+        picks.append(c); seen_fix.add(c["fixture_id"]); cat_count[cat] += 1
+
+    # 2) se non abbiamo abbastanza categorie, prova a sostituire elementi
+    def cats_ok(ps: List[Dict[str, Any]]) -> bool:
+        return len({p["cat"] for p in ps}) >= min_cats
+
+    if len(picks) == n_legs and cats_ok(picks):
+        return picks
+
+    # costruiamo elenco categorie mancanti
+    needed_cats = []
+    while len(picks) == n_legs and not cats_ok(picks):
+        present = {p["cat"] for p in picks}
+        target_cats = {"double_chance","totals_over","totals_under","btts","outright"}
+        lacking = [c for c in target_cats if c not in present]
+        if not lacking:
+            break
+        needed = lacking[0]; needed_cats.append(needed)
+        # prova a sostituire il pick con categoria più frequente con un candidato della categoria 'needed'
+        most_cat, _ = max(Counter([p["cat"] for p in picks]).items(), key=lambda kv: kv[1])
+        # trova candidato della categoria needed non in fixture già usati
+        for cand in sorted_pool:
+            if cand["cat"] != needed: continue
+            if cand["fixture_id"] in {p["fixture_id"] for p in picks}: continue
+            # sostituisci un pick della categoria 'most_cat'
+            repl_idx = next((i for i,p in enumerate(picks) if p["cat"] == most_cat), None)
+            if repl_idx is not None:
+                picks[repl_idx] = cand
+                break
+        else:
+            break  # nessun candidato della categoria richiesta disponibile
+
+    # Se ancora non soddisfa min_cats, restituisce comunque picks (meglio varianza parziale che nulla)
+    return picks[:n_legs]
+
+# -------------------------
+# Selezioni
+# -------------------------
+def _select_base(cands: List[Dict[str, Any]], fmt: str, n_legs: int,
+                 day_cat_bias: Counter | None = None) -> List[Dict[str, Any]]:
     lo, hi = RANGES[fmt]
     pool = [c for c in cands if _fits_range(c["odd"], lo, hi)]
-    # 1) Value prima
-    value_cands = [c for c in pool if c["value"] >= VALUE_TH[fmt]]
-    value_cands.sort(key=lambda x: (x["value"], x["p_mod"]), reverse=True)
-    picks = value_cands[: n_legs * 2]
-
-    # 2) Fallback sicurezza
-    if len(picks) < n_legs:
-        safe = [c for c in pool if c["p_mod"] >= SAFE_TH[fmt]]
-        safe.sort(key=lambda x: (SAFE_MARKETS_ORDER.index(x["market"]) if x["market"] in SAFE_MARKETS_ORDER else 99, -x["p_mod"]))
-        for s in safe:
-            if s not in picks:
-                picks.append(s)
-            if len(picks) >= n_legs * 2:
-                break
-
-    # 3) Dedup & diversificazione
+    # ordina: value prima, poi p_mod, poi mercato "safe"
+    pool.sort(key=lambda x: (x["value"], x["p_mod"], -(SAFE_MARKETS_ORDER.index(x["market"]) if x["market"] in SAFE_MARKETS_ORDER else -99)), reverse=True)
+    # enforce diversità
+    picks = _enforce_diversity(pool, n_legs, fmt, day_cat_bias=day_cat_bias)
+    # dedup & diversificazione lega
     picks = _dedup_by_fixture(picks)
     picks = _diversify_league(picks, max_per_league=3)
     return picks[:n_legs]
 
-def _reselect_to_meet_total(cands: List[Dict[str, Any]], fmt: str, n_legs: int, min_total: float) -> List[Dict[str, Any]]:
-    """
-    Secondo pass: alza l'asticella delle quote per-leg (senza impazzire),
-    puntando a raggiungere la soglia di quota totale richiesta.
-    """
-    if n_legs <= 0:
-        return []
-
-    # Geometric mean richiesta
-    from math import pow
+def _reselect_to_meet_total(cands: List[Dict[str, Any]], fmt: str, n_legs: int, min_total: float,
+                            day_cat_bias: Counter | None = None) -> List[Dict[str, Any]]:
     gm_needed = pow(float(min_total), 1.0 / n_legs)
     cap_hi = UPPER_CAP.get(fmt, 1.45)
-
-    # costruiamo una pool "hi" coerente col formato
     hi_pool = [c for c in cands if (c["odd"] >= gm_needed and c["odd"] <= cap_hi and (c["value"] >= VALUE_TH[fmt] or c["p_mod"] >= SAFE_TH[fmt]))]
-
-    # ordina prima per 'value', poi p_mod, poi odd (più alta)
+    # ordina "value → p_mod → odd"
     hi_pool.sort(key=lambda x: (x["value"], x["p_mod"], x["odd"]), reverse=True)
-
-    # Dedup e diversificazione mentre selezioniamo
-    picks: List[Dict[str, Any]] = []
-    seen_fixtures = set()
-    league_cnt: Dict[str, int] = {}
-    for c in hi_pool:
-        if len(picks) >= n_legs:
-            break
-        if c["fixture_id"] in seen_fixtures:
-            continue
-        lg = c["league"]
-        if league_cnt.get(lg, 0) >= 3:
-            continue
-        seen_fixtures.add(c["fixture_id"])
-        league_cnt[lg] = league_cnt.get(lg, 0) + 1
-        picks.append(c)
-
-    # verifica totale
+    picks = _enforce_diversity(hi_pool, n_legs, fmt, day_cat_bias=day_cat_bias)
     if len(picks) == n_legs and _compute_total(picks) >= min_total:
         return picks
 
-    # Se ancora non basta, tenta greedy per alzare il totale (quote più alte)
-    # prendendo la migliore combinazione possibile dal pool.
-    # (approccio semplice: prova a sostituire elementi con altri a odd più alti)
+    # greedy migliorativo mantenendo diversità
     improved = picks[:]
+    pool = hi_pool
     for i in range(len(improved)):
-        for cand in hi_pool:
-            if cand in improved:
-                continue
-            if cand["fixture_id"] in {p["fixture_id"] for p in improved}:
-                continue
-            trial = improved[:]
-            trial[i] = cand
-            # check league cap
-            from collections import Counter
-            lc = Counter([t["league"] for t in trial])
-            if any(v > 3 for v in lc.values()):
-                continue
+        for cand in pool:
+            if cand in improved: continue
+            if cand["fixture_id"] in {p["fixture_id"] for p in improved}: continue
+            trial = improved[:]; trial[i] = cand
+            # vincoli diversità
+            trial = _enforce_diversity(trial + [c for c in pool if c not in trial], n_legs, fmt, day_cat_bias=day_cat_bias)
+            if len(trial) != n_legs: continue
             if _compute_total(trial) > _compute_total(improved):
                 improved = trial
     if len(improved) == n_legs and _compute_total(improved) >= min_total:
         return improved
-
     return []
 
-def _select_for_format(cands: List[Dict[str, Any]], fmt: str, n_legs: int) -> List[Dict[str, Any]]:
-    """Selezione base (value → safe) + vincoli di coerenza; NO soglia totale."""
-    return _select_base(cands, fmt, n_legs)
-
-def _select_with_min_total(cands: List[Dict[str, Any]], fmt: str, n_legs: int) -> List[Dict[str, Any]]:
-    """
-    Come _select_for_format, ma se esiste MIN_TOTAL[fmt] tenta un secondo pass per raggiungere la soglia.
-    Se non raggiungibile con materiale buono → restituisce [] (salta il formato).
-    """
-    picks = _select_for_format(cands, fmt, n_legs)
-    if not picks:
-        return []
+def _select_with_min_total(cands: List[Dict[str, Any]], fmt: str, n_legs: int,
+                           day_cat_bias: Counter | None = None) -> List[Dict[str, Any]]:
+    picks = _select_base(cands, fmt, n_legs, day_cat_bias=day_cat_bias)
+    if not picks: return []
     need_min = MIN_TOTAL.get(fmt)
-    if not need_min:
-        return picks
-    if _compute_total(picks) >= need_min:
-        return picks
-    # secondo pass "hi-odds" controllato
-    boosted = _reselect_to_meet_total(cands, fmt, n_legs, need_min)
+    if not need_min: return picks
+    if _compute_total(picks) >= need_min: return picks
+    boosted = _reselect_to_meet_total(cands, fmt, n_legs, need_min, day_cat_bias=day_cat_bias)
     if boosted and _compute_total(boosted) >= need_min:
         return boosted
-    # non raggiungibile senza snaturare → salta
     return []
 
-def _select_long_with_min_total(cands: List[Dict[str, Any]], max_legs: int) -> List[Dict[str, Any]]:
-    """
-    Prova a costruire una super combo con quota totale >= MIN_TOTAL['long'].
-    Tenta prima con il numero massimo di leg, poi scende fino a 8 (se necessario).
-    Se non raggiungibile → ritorna [] (niente super combo oggi).
-    """
+def _select_long_with_min_total(cands: List[Dict[str, Any]], max_legs: int,
+                                day_cat_bias: Counter | None = None) -> List[Dict[str, Any]]:
     min_total = MIN_TOTAL["long"]
-    # prova dal massimo (più facile arrivare a min_total) verso 8
     for n in range(max_legs, 7, -1):
-        picks = _select_with_min_total(cands, "long", n)
+        picks = _select_with_min_total(cands, "long", n, day_cat_bias=day_cat_bias)
         if picks and _compute_total(picks) >= min_total:
             return picks
     return []
 
+# -------------------------
+# Planner
+# -------------------------
 def plan_day(api, cfg, date_str: str, want_long_legs: int = 10) -> Dict[str, List[Dict[str, Any]]]:
     """
     Ritorna un piano con blocchi:
@@ -359,43 +337,47 @@ def plan_day(api, cfg, date_str: str, want_long_legs: int = 10) -> Dict[str, Lis
     - doppia: 2 legs
     - tripla: 3 legs
     - quintupla: 5 legs (totale >= 4.0)
-    - long: 8–want_long_legs legs (totale >= 6.0), se possibile
+    - long: 8–want_long_legs legs (totale >= 6.0)
+    Con vincoli di VARIANZA per blocco e 'bias' giornaliero (evita monotonia su tutte le schedine).
     """
     cands = build_daily_candidates(api, cfg, date_str)
 
-    # due singole
-    s1 = _select_for_format(cands, "single", 1)
+    # bias giornaliero: evitiamo che TUTTE le schedine siano piene di 'totals_under'
+    day_cat_bias = Counter()
+
+    # 2 singole
+    s1 = _select_base(cands, "single", 1, day_cat_bias=day_cat_bias)
+    for p in s1: day_cat_bias[p["cat"]] += 1
     used = set(p["fixture_id"] for p in s1)
+
     c2 = [c for c in cands if c["fixture_id"] not in used]
-    s2 = _select_for_format(c2, "single", 1)
+    s2 = _select_base(c2, "single", 1, day_cat_bias=day_cat_bias)
+    for p in s2: day_cat_bias[p["cat"]] += 1
+    used |= set(p["fixture_id"] for p in s2)
 
     # doppia
-    used |= set(p["fixture_id"] for p in s2)
     c3 = [c for c in cands if c["fixture_id"] not in used]
-    d2 = _select_for_format(c3, "double", 2)
+    d2 = _select_base(c3, "double", 2, day_cat_bias=day_cat_bias)
+    for p in d2: day_cat_bias[p["cat"]] += 1
+    used |= set(p["fixture_id"] for p in d2)
 
     # tripla
-    used |= set(p["fixture_id"] for p in d2)
     c4 = [c for c in cands if c["fixture_id"] not in used]
-    t3 = _select_for_format(c4, "triple", 3)
-
-    # quintupla (con minimo totale 4x)
+    t3 = _select_base(c4, "triple", 3, day_cat_bias=day_cat_bias)
+    for p in t3: day_cat_bias[p["cat"]] += 1
     used |= set(p["fixture_id"] for p in t3)
+
+    # quintupla con min totale
     c5 = [c for c in cands if c["fixture_id"] not in used]
-    q5 = _select_with_min_total(c5, "quint", 5)  # se non raggiunge 4x -> []
-
-    # super combo (8–N) con minimo 6x
+    q5 = _select_with_min_total(c5, "quint", 5, day_cat_bias=day_cat_bias)
+    for p in (q5 or []): day_cat_bias[p["cat"]] += 1
     used |= set(p["fixture_id"] for p in (q5 or []))
-    c6 = [c for c in cands if c["fixture_id"] not in used]
-    long = _select_long_with_min_total(c6, want_long_legs)  # se non raggiunge 6x -> []
 
-    return {
-        "singole": s1 + s2,     # 0..2 items
-        "doppia": d2,           # 0..2 legs
-        "tripla": t3,           # 0..3 legs
-        "quintupla": q5,        # [] se non raggiunge x4
-        "long": long            # [] se non raggiunge x6
-    }
+    # super combo
+    c6 = [c for c in cands if c["fixture_id"] not in used]
+    long = _select_long_with_min_total(c6, want_long_legs, day_cat_bias=day_cat_bias)
+
+    return {"singole": s1 + s2, "doppia": d2, "tripla": t3, "quintupla": q5, "long": long}
 
 def render_plan_blocks(api, cfg, plan: Dict[str, List[Dict[str, Any]]]) -> List[str]:
     tz_str = getattr(cfg, "TZ", "Europe/Rome")
