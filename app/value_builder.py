@@ -22,7 +22,7 @@ VALUE_TH = {"single":0.06, "double":0.04, "triple":0.03, "quint":0.02, "long":0.
 # Soglie fallback 'sicurezza' (probabilità nostra per leg)
 SAFE_TH  = {"single":0.75, "double":0.70, "triple":0.65, "quint":0.60, "long":0.55}
 
-# >>> Soglie minime PER-LEG e MEDIA schedina (per alzare il tasso di cassa)
+# Soglie minime PER-LEG e MEDIA schedina (per alzare il tasso di cassa)
 MIN_PMOD_PER_LEG = {"single":0.78, "double":0.74, "triple":0.70, "quint":0.68, "long":0.64}
 MIN_AVG_PMOD     = {"single":0.78, "double":0.73, "triple":0.69, "quint":0.67, "long":0.63}
 
@@ -34,6 +34,14 @@ MIN_TOTAL = {"quint": 4.00, "long": 6.00}
 
 # Cap massimo per quote per-leg nel "secondo pass" (quando serve alzare)
 UPPER_CAP = {"single":1.70,"double":1.50,"triple":1.45,"quint":1.45,"long":1.30}
+
+# Target quota totali per lo scoring (per misurare “quanto ci avviciniamo all’ideale”)
+TARGET_TOTAL = {"single":1.55,"double":1.90,"triple":2.10,"quint":4.00,"long":6.00}
+
+# Scoring pesi (priorità alla presa, poi quota, poi varietà)
+ALPHA = 0.70  # peso probabilità di cassa del ticket
+BETA  = 0.20  # peso “quota/target”
+GAMMA = 0.10  # peso varianza interna al ticket
 
 # -------------------------
 # CATEGORIE per la VARIANZA
@@ -257,12 +265,11 @@ def _enforce_diversity(sorted_pool: List[Dict[str, Any]], n_legs: int, fmt: str,
         return len({p["cat"] for p in ps}) >= min_cats
 
     if len(picks) == n_legs and cats_ok(picks):
-        # check media p_mod
         fmt_key = "single" if n_legs == 1 else fmt
         if sum(p["p_mod"] for p in picks)/n_legs >= MIN_AVG_PMOD[fmt_key]:
             return picks
 
-    # miglioramenti di varianza / media p_mod
+    # miglioramenti varianza/media p_mod
     improved = picks[:]
     pool = [c for c in sorted_pool if c not in improved]
     for i in range(len(improved)):
@@ -325,78 +332,141 @@ def _select_long_with_min_total(cands: List[Dict[str, Any]], max_legs: int,
     return []
 
 # -------------------------
-# PACKAGING ADATTIVO (NON FORZARE)
+# SCORING TICKET & PACK
+# -------------------------
+def _ticket_prob(legs: List[Dict[str, Any]]) -> float:
+    p = 1.0
+    for leg in legs: p *= float(leg["p_mod"])
+    return round(p, 4)
+
+def _ticket_var_score(legs: List[Dict[str, Any]]) -> float:
+    cats = {leg["cat"] for leg in legs}
+    return min(len(cats) / max(1, len(legs)), 1.0)  # 0..1
+
+def _ticket_score(fmt: str, legs: List[Dict[str, Any]]) -> float:
+    p = _ticket_prob(legs)
+    tot = _compute_total(legs)
+    target = TARGET_TOTAL.get(fmt, 1.0)
+    quota_norm = min(tot / target, 1.0)
+    var_score = _ticket_var_score(legs)
+    return ALPHA * p + BETA * quota_norm + GAMMA * var_score
+
+def _pack_score(tickets: List[Tuple[str, List[Dict[str, Any]]]]) -> float:
+    # somma degli score + bonus “più schedine con alta P = più chance di fare almeno una cassa”
+    base = sum(_ticket_score(fmt, legs) for fmt, legs in tickets)
+    bonus = sum(_ticket_prob(legs) for _, legs in tickets) * 0.15
+    return base + bonus
+
+# -------------------------
+# PACKAGING ADATTIVO (SCELTA MIGLIORE)
+# -------------------------
+def _make_ticket(fmt: str, legs: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]]]:
+    return (fmt, legs)
+
+def _choose_best_pack(cands: List[Dict[str, Any]], want_long_legs: int) -> Dict[str, List[Dict[str, Any]]]:
+    """Genera più combinazioni sensate, le valuta, sceglie il pack con score più alto."""
+    day_cat_bias = Counter()
+    plans: List[Dict[str, List[Dict[str, Any]]]] = []
+
+    # Helper per clonare cands e accumulare used fixtures
+    def take_fmt(current_used: set, fmt: str, n: int, need_total: bool = False):
+        pool = [c for c in cands if c["fixture_id"] not in current_used]
+        if fmt == "long":
+            pick = _select_long_with_min_total(pool, want_long_legs, day_cat_bias=day_cat_bias)
+        elif need_total:
+            pick = _select_with_min_total(pool, fmt, n, day_cat_bias=day_cat_bias)
+        else:
+            pick = _select_base(pool, fmt, n, day_cat_bias=day_cat_bias)
+        if pick:
+            current_used |= set(p["fixture_id"] for p in pick)
+        return pick, current_used
+
+    # opzioni candidate (costruiamo in ordine diverso, senza forzare)
+    # A) quintupla (min 4x) + singola
+    usedA = set()
+    q5A, usedA = take_fmt(usedA, "quint", 5, need_total=True)
+    if q5A:
+        s1A, usedA = take_fmt(usedA, "single", 1, need_total=False)
+        plans.append({"quintupla": q5A, "tripla": [], "doppia": [], "singole": s1A or [], "long": []})
+
+    # B) tripla + doppia + singola
+    usedB = set()
+    t3B, usedB = take_fmt(usedB, "triple", 3)
+    d2B, usedB = take_fmt(usedB, "double", 2)
+    s1B, usedB = take_fmt(usedB, "single", 1)
+    if t3B and d2B and s1B:
+        plans.append({"quintupla": [], "tripla": t3B, "doppia": d2B, "singole": s1B, "long": []})
+
+    # C) tripla + doppia
+    usedC = set()
+    t3C, usedC = take_fmt(usedC, "triple", 3)
+    d2C, usedC = take_fmt(usedC, "double", 2)
+    if t3C and d2C:
+        plans.append({"quintupla": [], "tripla": t3C, "doppia": d2C, "singole": [], "long": []})
+
+    # D) doppia + doppia + singola
+    usedD = set()
+    d2D1, usedD = take_fmt(usedD, "double", 2)
+    d2D2, usedD = take_fmt(usedD, "double", 2)
+    s1D, usedD = take_fmt(usedD, "single", 1)
+    if d2D1 and d2D2 and s1D:
+        plans.append({"quintupla": [], "tripla": [], "doppia": d2D1 + d2D2, "singole": s1D, "long": []})
+
+    # E) due singole + doppia
+    usedE = set()
+    s1E1, usedE = take_fmt(usedE, "single", 1)
+    s1E2, usedE = take_fmt(usedE, "single", 1)
+    d2E,  usedE = take_fmt(usedE, "double", 2)
+    if s1E1 and s1E2 and d2E:
+        plans.append({"quintupla": [], "tripla": [], "doppia": d2E, "singole": s1E1 + s1E2, "long": []})
+
+    # F) super combo (8..N, min 6x) da sola
+    usedF = set()
+    longF, usedF = take_fmt(usedF, "long", want_long_legs, need_total=True)
+    if longF:
+        plans.append({"quintupla": [], "tripla": [], "doppia": [], "singole": [], "long": longF})
+
+    # G) fallback minimi (tripla oppure doppia oppure singole)
+    usedG = set()
+    t3G, usedG = take_fmt(usedG, "triple", 3)
+    if t3G:
+        plans.append({"quintupla": [], "tripla": t3G, "doppia": [], "singole": [], "long": []})
+    usedH = set()
+    d2H, usedH = take_fmt(usedH, "double", 2)
+    if d2H:
+        plans.append({"quintupla": [], "tripla": [], "doppia": d2H, "singole": [], "long": []})
+    usedI = set()
+    s1I, usedI = take_fmt(usedI, "single", 1)
+    if s1I:
+        plans.append({"quintupla": [], "tripla": [], "doppia": [], "singole": s1I, "long": []})
+
+    if not plans:
+        return {"singole": [], "doppia": [], "tripla": [], "quintupla": [], "long": []}
+
+    # valuta ogni plan
+    best = None; best_score = -1.0
+    for pl in plans:
+        tickets: List[Tuple[str, List[Dict[str, Any]]]] = []
+        if pl["quintupla"]: tickets.append(("quint", pl["quintupla"]))
+        if pl["tripla"]:    tickets.append(("triple", pl["tripla"]))
+        if pl["doppia"]:    tickets.append(("double", pl["doppia"]))
+        if pl["singole"]:
+            # ogni singola è un ticket
+            for s in pl["singole"]:
+                tickets.append(("single", [s]))
+        if pl["long"]:      tickets.append(("long", pl["long"]))
+        score = _pack_score(tickets)
+        if score > best_score:
+            best_score = score; best = pl
+    return best or {"singole": [], "doppia": [], "tripla": [], "quintupla": [], "long": []}
+
+# -------------------------
+# Planner (usa la scelta migliore)
 # -------------------------
 def plan_day(api, cfg, date_str: str, want_long_legs: int = 10) -> Dict[str, List[Dict[str, Any]]]:
-    """
-    Packaging adattivo:
-      - Priorità al valore e alla presa (soglie per-leg e media).
-      - Non forzare quintupla/super combo: pubblica solo ciò che supera le soglie.
-      - Se ho poco materiale, splitta in formati più corti (tripla+doppia, 2 singole, ...).
-    """
     cands = build_daily_candidates(api, cfg, date_str)
-    day_cat_bias = Counter()
-    used = set()
-    plan: Dict[str, List[Dict[str, Any]]] = {"singole":[], "doppia":[], "tripla":[], "quintupla":[], "long":[]}
-
-    # 1) Prova quintupla (solo se reale: totale >= 4.0)
-    cQ = [c for c in cands if c["fixture_id"] not in used]
-    q5 = _select_with_min_total(cQ, "quint", 5, day_cat_bias=day_cat_bias)
-    if q5:
-        plan["quintupla"] = q5
-        used |= set(p["fixture_id"] for p in q5)
-        for p in q5: day_cat_bias[p["cat"]] += 1
-
-    # 2) Prova super combo (8..N) solo se totale >= 6.0 e materiale c'è
-    cL = [c for c in cands if c["fixture_id"] not in used]
-    long = _select_long_with_min_total(cL, want_long_legs, day_cat_bias=day_cat_bias)
-    if long:
-        plan["long"] = long
-        used |= set(p["fixture_id"] for p in long)
-        for p in long: day_cat_bias[p["cat"]] += 1
-
-    # 3) Tripla
-    cT = [c for c in cands if c["fixture_id"] not in used]
-    t3 = _select_base(cT, "triple", 3, day_cat_bias=day_cat_bias)
-    if t3:
-        plan["tripla"] = t3
-        used |= set(p["fixture_id"] for p in t3)
-        for p in t3: day_cat_bias[p["cat"]] += 1
-
-    # 4) Doppia
-    cD = [c for c in cands if c["fixture_id"] not in used]
-    d2 = _select_base(cD, "double", 2, day_cat_bias=day_cat_bias)
-    if d2:
-        plan["doppia"] = d2
-        used |= set(p["fixture_id"] for p in d2)
-        for p in d2: day_cat_bias[p["cat"]] += 1
-
-    # 5) Singole (fino a 2), solo se davvero forti
-    for _ in range(2):
-        cS = [c for c in cands if c["fixture_id"] not in used]
-        s1 = _select_base(cS, "single", 1, day_cat_bias=day_cat_bias)
-        if not s1:
-            break
-        plan["singole"].extend(s1)
-        used |= set(p["fixture_id"] for p in s1)
-        for p in s1: day_cat_bias[p["cat"]] += 1
-
-    # 6) Se non abbiamo quintupla o long ma abbiamo abbastanza valore, splitta meglio
-    #    Esempio: 5 value → tripla + doppia; 6 value → tripla + doppia + singola
-    if not plan["quintupla"] and not plan["long"]:
-        # riusa materiale non usato per ottimizzare: prova ad aggiungere una seconda tripla/doppia
-        cMore = [c for c in cands if c["fixture_id"] not in used]
-        t3b = _select_base(cMore, "triple", 3, day_cat_bias=day_cat_bias)
-        if t3b:
-            plan["tripla"] = (plan["tripla"] or []) + t3b
-            used |= set(p["fixture_id"] for p in t3b)
-        cMore = [c for c in cands if c["fixture_id"] not in used]
-        d2b = _select_base(cMore, "double", 2, day_cat_bias=day_cat_bias)
-        if d2b:
-            plan["doppia"] = (plan["doppia"] or []) + d2b
-            used |= set(p["fixture_id"] for p in d2b)
-
-    return plan
+    best = _choose_best_pack(cands, want_long_legs)
+    return best
 
 # -------------------------
 # Rendering
@@ -407,18 +477,11 @@ def render_plan_blocks(api, cfg, plan: Dict[str, List[Dict[str, Any]]]) -> List[
     singles = plan["singole"]
     if singles:
         for idx, s in enumerate(singles, start=1):
-            lines = _format_block(f"🔎 <b>SINGOLA {idx}</b>", [s], tz_str)
-            blocks.append(lines)
+            blocks.append(_format_block(f"🔎 <b>SINGOLA {idx}</b>", [s], tz_str))
     if plan["doppia"]:
         blocks.append(_format_block("🧩 <b>DOPPIA</b>", plan["doppia"], tz_str))
     if plan["tripla"]:
-        # se abbiamo due triple (pack adattivo), splitta in due blocchi da 3
-        t = plan["tripla"]
-        if len(t) > 3:
-            blocks.append(_format_block("🎻 <b>TRIPLA</b>", t[:3], tz_str))
-            blocks.append(_format_block("🎻 <b>TRIPLA</b>", t[3:6], tz_str))
-        else:
-            blocks.append(_format_block("🎻 <b>TRIPLA</b>", t, tz_str))
+        blocks.append(_format_block("🎻 <b>TRIPLA</b>", plan["tripla"], tz_str))
     if plan["quintupla"]:
         blocks.append(_format_block("🎬 <b>QUINTUPLA</b>", plan["quintupla"], tz_str))
     if plan["long"]:
