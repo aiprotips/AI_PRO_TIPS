@@ -6,7 +6,7 @@ from collections import Counter
 from .stats_engine import StatsEngine, clamp
 
 # -------------------------
-# Range quote per formato (prima passata "soft")
+# Range quota per formato (prima passata "soft")
 # -------------------------
 RANGES = {
     "single":  (1.45, 1.65),
@@ -19,10 +19,10 @@ RANGES = {
 # Soglie 'value' (delta minimo vs p_imp)
 VALUE_TH = {"single":0.06, "double":0.04, "triple":0.03, "quint":0.02, "long":0.01}
 
-# Soglie fallback 'sicurezza' se non c'è value (probabilità nostra per leg)
+# Soglie fallback 'sicurezza' (probabilità nostra per leg)
 SAFE_TH  = {"single":0.75, "double":0.70, "triple":0.65, "quint":0.60, "long":0.55}
 
-# >>> NUOVE: soglie minime PER-LEG e MEDIA schedina (per alzare il tasso di cassa)
+# >>> Soglie minime PER-LEG e MEDIA schedina (per alzare il tasso di cassa)
 MIN_PMOD_PER_LEG = {"single":0.78, "double":0.74, "triple":0.70, "quint":0.68, "long":0.64}
 MIN_AVG_PMOD     = {"single":0.78, "double":0.73, "triple":0.69, "quint":0.67, "long":0.63}
 
@@ -127,7 +127,7 @@ def _mk_candidate(entry: Dict[str, Any], market: str, feats: Dict[str, Any]) -> 
         "market": market, "odd": odd,
         "p_imp": round(p_imp, 4), "p_mod": round(p_mod, 4), "value": round(value, 4),
         "cat": market_category(market),
-        "markets_all": mk,  # per veto coerenza
+        "markets_all": mk,
     }
 
 def _fits_range(odd: float, lo: float, hi: float) -> bool:
@@ -139,30 +139,19 @@ def _fits_range(odd: float, lo: float, hi: float) -> bool:
 # VETO RISCHIO (no pick forzati)
 # -------------------------
 def _risk_veto(c: Dict[str, Any]) -> bool:
-    """
-    True = boccia il candidato:
-      - 1/2 in match troppo 50-50 (gap < 0.08)
-      - Gol quando Under3.5 è molto basso (<=1.22) o Under2.5 <=1.35
-      - No Gol quando Over2.5 <=1.60 e BTTS implicita alta (grezza)
-    """
     mk = c.get("markets_all") or {}
     m = c["market"]
-    # gap dai 1/2 impliciti
     p1 = _p_imp(mk.get("1", 0.0)); p2 = _p_imp(mk.get("2", 0.0))
     gap = abs(p1 - p2)
-
     if m in ("1","2") and gap < 0.08:
-        return True  # partita troppo equilibrata per sides
-
+        return True
     u35 = float(mk.get("Under 3.5", 99))
     u25 = float(mk.get("Under 2.5", 99))
     o25 = float(mk.get("Over 2.5", 0))
-
     if m == "Gol" and (u35 <= 1.22 or u25 <= 1.35):
         return True
     if m == "No Gol" and (o25 <= 1.60):
         return True
-
     return False
 
 # -------------------------
@@ -175,7 +164,6 @@ def build_daily_candidates(api, cfg, date_str: str) -> List[Dict[str, Any]]:
         entries = [e for e in entries if allowed_league(e["league_country"], e["league_name"])]
     except Exception:
         pass
-
     se = StatsEngine(api)
     out: List[Dict[str, Any]] = []
     for e in entries:
@@ -238,7 +226,7 @@ def _format_block(label: str, legs: List[Dict[str, Any]], tz_str: str) -> str:
     return "\n".join(lines)
 
 # -------------------------
-# Diversità
+# DIVERSITÀ & SELEZIONE DI BASE
 # -------------------------
 def _enforce_diversity(sorted_pool: List[Dict[str, Any]], n_legs: int, fmt: str,
                        day_cat_bias: Counter | None = None) -> List[Dict[str, Any]]:
@@ -256,22 +244,21 @@ def _enforce_diversity(sorted_pool: List[Dict[str, Any]], n_legs: int, fmt: str,
         if len(picks) >= n_legs: break
         if c["fixture_id"] in seen_fix: continue
         cat = c["cat"]
-        # de-prioritizza categorie abusate nell'intera giornata
         if day_cat_bias and day_cat_bias.get(cat, 0) > max(0, day_cat_bias.total()//3):
             continue
         if max_per_cat and cat_count[cat] >= max_per_cat:
             continue
-        # blocco per-leg forte
         fmt_key = "single" if n_legs == 1 else fmt
         if c["p_mod"] < MIN_PMOD_PER_LEG[fmt_key]:
             continue
         picks.append(c); seen_fix.add(c["fixture_id"]); cat_count[cat] += 1
 
-    # se varianza insufficiente prova a sostituire
     def cats_ok(ps: List[Dict[str, Any]]) -> bool:
         return len({p["cat"] for p in ps}) >= min_cats
+
     if len(picks) == n_legs and cats_ok(picks):
         # check media p_mod
+        fmt_key = "single" if n_legs == 1 else fmt
         if sum(p["p_mod"] for p in picks)/n_legs >= MIN_AVG_PMOD[fmt_key]:
             return picks
 
@@ -282,37 +269,25 @@ def _enforce_diversity(sorted_pool: List[Dict[str, Any]], n_legs: int, fmt: str,
         for cand in pool:
             if cand["fixture_id"] in {p["fixture_id"] for p in improved}: continue
             trial = improved[:]; trial[i] = cand
-            # vincoli
             if max_per_cat and Counter([t["cat"] for t in trial])[cand["cat"]] > max_per_cat:
                 continue
-            if not cats_ok(trial):
-                continue
+            if not cats_ok(trial): continue
             fmt_key = "single" if n_legs == 1 else fmt
-            if any(t["p_mod"] < MIN_PMOD_PER_LEG[fmt_key] for t in trial):
-                continue
-            if (sum(t["p_mod"] for t in trial)/n_legs) < MIN_AVG_PMOD[fmt_key]:
-                continue
+            if any(t["p_mod"] < MIN_PMOD_PER_LEG[fmt_key] for t in trial): continue
+            if (sum(t["p_mod"] for t in trial)/n_legs) < MIN_AVG_PMOD[fmt_key]: continue
             improved = trial
     if len(improved) == n_legs:
         return improved
     return picks[:n_legs]
 
-# -------------------------
-# Selezione per formato
-# -------------------------
 def _select_base(cands: List[Dict[str, Any]], fmt: str, n_legs: int,
                  day_cat_bias: Counter | None = None) -> List[Dict[str, Any]]:
     lo, hi = RANGES[fmt]
-    # filtra su range
     pool = [c for c in cands if _fits_range(c["odd"], lo, hi)]
-    # ordina: value -> p_mod -> mercati safe
     pool.sort(key=lambda x: (x["value"], x["p_mod"], -(SAFE_MARKETS_ORDER.index(x["market"]) if x["market"] in SAFE_MARKETS_ORDER else -99)), reverse=True)
-    # applica varianza + soglie p_mod per-leg e media
     picks = _enforce_diversity(pool, n_legs, fmt, day_cat_bias=day_cat_bias)
-    # dedup e diversificazione lega
     picks = _dedup_by_fixture(picks)
     picks = _diversify_league(picks, max_per_league=3)
-    # check media
     fmt_key = "single" if n_legs == 1 else fmt
     if picks and (sum(p["p_mod"] for p in picks)/len(picks) < MIN_AVG_PMOD[fmt_key]):
         return []
@@ -322,33 +297,13 @@ def _reselect_to_meet_total(cands: List[Dict[str, Any]], fmt: str, n_legs: int, 
                             day_cat_bias: Counter | None = None) -> List[Dict[str, Any]]:
     gm_needed = pow(float(min_total), 1.0 / n_legs)
     cap_hi = UPPER_CAP.get(fmt, 1.45)
-    # filtra candidati compatibili e forti
     hi_pool = [c for c in cands if (c["odd"] >= gm_needed and c["odd"] <= cap_hi and (c["value"] >= VALUE_TH[fmt] or c["p_mod"] >= SAFE_TH[fmt]))]
     hi_pool.sort(key=lambda x: (x["value"], x["p_mod"], x["odd"]), reverse=True)
     picks = _enforce_diversity(hi_pool, n_legs, fmt, day_cat_bias=day_cat_bias)
-    # verifica media p_mod
     fmt_key = "single" if n_legs == 1 else fmt
     if not picks or (sum(p["p_mod"] for p in picks)/len(picks) < MIN_AVG_PMOD[fmt_key]):
         return []
-    if _compute_total(picks) >= min_total:
-        return picks
-
-    # greedy per alzare totale mantenendo vincoli
-    improved = picks[:]
-    for i in range(len(improved)):
-        for cand in hi_pool:
-            if cand in improved: continue
-            if cand["fixture_id"] in {p["fixture_id"] for p in improved}: continue
-            trial = improved[:]; trial[i] = cand
-            trial = _enforce_diversity(trial + [c for c in hi_pool if c not in trial], n_legs, fmt, day_cat_bias=day_cat_bias)
-            if len(trial) != n_legs: continue
-            if (sum(t["p_mod"] for t in trial)/n_legs) < MIN_AVG_PMOD[fmt_key]:
-                continue
-            if _compute_total(trial) > _compute_total(improved):
-                improved = trial
-    if len(improved) == n_legs and _compute_total(improved) >= min_total:
-        return improved
-    return []
+    return picks if _compute_total(picks) >= min_total else []
 
 def _select_with_min_total(cands: List[Dict[str, Any]], fmt: str, n_legs: int,
                            day_cat_bias: Counter | None = None) -> List[Dict[str, Any]]:
@@ -358,9 +313,7 @@ def _select_with_min_total(cands: List[Dict[str, Any]], fmt: str, n_legs: int,
     if not need_min: return picks
     if _compute_total(picks) >= need_min: return picks
     boosted = _reselect_to_meet_total(cands, fmt, n_legs, need_min, day_cat_bias=day_cat_bias)
-    if boosted and _compute_total(boosted) >= need_min:
-        return boosted
-    return []
+    return boosted if boosted else []
 
 def _select_long_with_min_total(cands: List[Dict[str, Any]], max_legs: int,
                                 day_cat_bias: Counter | None = None) -> List[Dict[str, Any]]:
@@ -372,54 +325,100 @@ def _select_long_with_min_total(cands: List[Dict[str, Any]], max_legs: int,
     return []
 
 # -------------------------
-# Planner
+# PACKAGING ADATTIVO (NON FORZARE)
 # -------------------------
 def plan_day(api, cfg, date_str: str, want_long_legs: int = 10) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Packaging adattivo:
+      - Priorità al valore e alla presa (soglie per-leg e media).
+      - Non forzare quintupla/super combo: pubblica solo ciò che supera le soglie.
+      - Se ho poco materiale, splitta in formati più corti (tripla+doppia, 2 singole, ...).
+    """
     cands = build_daily_candidates(api, cfg, date_str)
-
     day_cat_bias = Counter()
+    used = set()
+    plan: Dict[str, List[Dict[str, Any]]] = {"singole":[], "doppia":[], "tripla":[], "quintupla":[], "long":[]}
 
-    # due singole
-    s1 = _select_base(cands, "single", 1, day_cat_bias=day_cat_bias)
-    for p in s1: day_cat_bias[p["cat"]] += 1
-    used = set(p["fixture_id"] for p in s1)
+    # 1) Prova quintupla (solo se reale: totale >= 4.0)
+    cQ = [c for c in cands if c["fixture_id"] not in used]
+    q5 = _select_with_min_total(cQ, "quint", 5, day_cat_bias=day_cat_bias)
+    if q5:
+        plan["quintupla"] = q5
+        used |= set(p["fixture_id"] for p in q5)
+        for p in q5: day_cat_bias[p["cat"]] += 1
 
-    c2 = [c for c in cands if c["fixture_id"] not in used]
-    s2 = _select_base(c2, "single", 1, day_cat_bias=day_cat_bias)
-    for p in s2: day_cat_bias[p["cat"]] += 1
-    used |= set(p["fixture_id"] for p in s2)
+    # 2) Prova super combo (8..N) solo se totale >= 6.0 e materiale c'è
+    cL = [c for c in cands if c["fixture_id"] not in used]
+    long = _select_long_with_min_total(cL, want_long_legs, day_cat_bias=day_cat_bias)
+    if long:
+        plan["long"] = long
+        used |= set(p["fixture_id"] for p in long)
+        for p in long: day_cat_bias[p["cat"]] += 1
 
-    c3 = [c for c in cands if c["fixture_id"] not in used]
-    d2 = _select_base(c3, "double", 2, day_cat_bias=day_cat_bias)
-    for p in d2: day_cat_bias[p["cat"]] += 1
-    used |= set(p["fixture_id"] for p in d2)
+    # 3) Tripla
+    cT = [c for c in cands if c["fixture_id"] not in used]
+    t3 = _select_base(cT, "triple", 3, day_cat_bias=day_cat_bias)
+    if t3:
+        plan["tripla"] = t3
+        used |= set(p["fixture_id"] for p in t3)
+        for p in t3: day_cat_bias[p["cat"]] += 1
 
-    c4 = [c for c in cands if c["fixture_id"] not in used]
-    t3 = _select_base(c4, "triple", 3, day_cat_bias=day_cat_bias)
-    for p in t3: day_cat_bias[p["cat"]] += 1
-    used |= set(p["fixture_id"] for p in t3)
+    # 4) Doppia
+    cD = [c for c in cands if c["fixture_id"] not in used]
+    d2 = _select_base(cD, "double", 2, day_cat_bias=day_cat_bias)
+    if d2:
+        plan["doppia"] = d2
+        used |= set(p["fixture_id"] for p in d2)
+        for p in d2: day_cat_bias[p["cat"]] += 1
 
-    c5 = [c for c in cands if c["fixture_id"] not in used]
-    q5 = _select_with_min_total(c5, "quint", 5, day_cat_bias=day_cat_bias)
-    for p in (q5 or []): day_cat_bias[p["cat"]] += 1
-    used |= set(p["fixture_id"] for p in (q5 or []))
+    # 5) Singole (fino a 2), solo se davvero forti
+    for _ in range(2):
+        cS = [c for c in cands if c["fixture_id"] not in used]
+        s1 = _select_base(cS, "single", 1, day_cat_bias=day_cat_bias)
+        if not s1:
+            break
+        plan["singole"].extend(s1)
+        used |= set(p["fixture_id"] for p in s1)
+        for p in s1: day_cat_bias[p["cat"]] += 1
 
-    c6 = [c for c in cands if c["fixture_id"] not in used]
-    long = _select_long_with_min_total(c6, want_long_legs, day_cat_bias=day_cat_bias)
+    # 6) Se non abbiamo quintupla o long ma abbiamo abbastanza valore, splitta meglio
+    #    Esempio: 5 value → tripla + doppia; 6 value → tripla + doppia + singola
+    if not plan["quintupla"] and not plan["long"]:
+        # riusa materiale non usato per ottimizzare: prova ad aggiungere una seconda tripla/doppia
+        cMore = [c for c in cands if c["fixture_id"] not in used]
+        t3b = _select_base(cMore, "triple", 3, day_cat_bias=day_cat_bias)
+        if t3b:
+            plan["tripla"] = (plan["tripla"] or []) + t3b
+            used |= set(p["fixture_id"] for p in t3b)
+        cMore = [c for c in cands if c["fixture_id"] not in used]
+        d2b = _select_base(cMore, "double", 2, day_cat_bias=day_cat_bias)
+        if d2b:
+            plan["doppia"] = (plan["doppia"] or []) + d2b
+            used |= set(p["fixture_id"] for p in d2b)
 
-    return {"singole": s1 + s2, "doppia": d2, "tripla": t3, "quintupla": q5, "long": long}
+    return plan
 
+# -------------------------
+# Rendering
+# -------------------------
 def render_plan_blocks(api, cfg, plan: Dict[str, List[Dict[str, Any]]]) -> List[str]:
     tz_str = getattr(cfg, "TZ", "Europe/Rome")
     blocks: List[str] = []
     singles = plan["singole"]
     if singles:
         for idx, s in enumerate(singles, start=1):
-            blocks.append(_format_block(f"🔎 <b>SINGOLA {idx}</b>", [s], tz_str))
+            lines = _format_block(f"🔎 <b>SINGOLA {idx}</b>", [s], tz_str)
+            blocks.append(lines)
     if plan["doppia"]:
         blocks.append(_format_block("🧩 <b>DOPPIA</b>", plan["doppia"], tz_str))
     if plan["tripla"]:
-        blocks.append(_format_block("🎻 <b>TRIPLA</b>", plan["tripla"], tz_str))
+        # se abbiamo due triple (pack adattivo), splitta in due blocchi da 3
+        t = plan["tripla"]
+        if len(t) > 3:
+            blocks.append(_format_block("🎻 <b>TRIPLA</b>", t[:3], tz_str))
+            blocks.append(_format_block("🎻 <b>TRIPLA</b>", t[3:6], tz_str))
+        else:
+            blocks.append(_format_block("🎻 <b>TRIPLA</b>", t, tz_str))
     if plan["quintupla"]:
         blocks.append(_format_block("🎬 <b>QUINTUPLA</b>", plan["quintupla"], tz_str))
     if plan["long"]:
