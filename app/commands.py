@@ -39,8 +39,7 @@ def _format_markets(mk: Dict[str, float]) -> List[str]:
     return lines
 
 def _render_day(api: APIFootball, cfg: Config, date_str: str) -> List[str]:
-    # usa l’API con fallback: odds per data, altrimenti fixtures -> odds per fixture
-    entries = api.entries_by_date_bet365(date_str)
+    entries = api.entries_by_date_bet365(date_str)  # usa paginazione + fallback
     parsed = [p for p in entries if allowed_league(p["league_country"], p["league_name"])]
     if not parsed:
         return [f"<b>{date_str}</b> — Nessuna quota Bet365 disponibile per i campionati whitelisted."]
