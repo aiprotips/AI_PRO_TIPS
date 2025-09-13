@@ -1,4 +1,4 @@
-# app/commands.p
+# app/commands.py
 from typing import Dict, Any, List
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -75,6 +75,22 @@ class CommandsLoop:
         self.api = api
         self._offset = 0
 
+    # ---------- PATCH: invio compatibile con entrambe le firme ----------
+    def _send(self, chat_id: int, text: str):
+        try:
+            # firma: (text, chat_id=...)
+            return self.tg.send_message(text, chat_id=chat_id)
+        except TypeError:
+            # fallback: (chat_id, text)
+            return self.tg.send_message(chat_id, text)
+        except Exception:
+            # ultima difesa: prova anche senza parse_mode ecc (se client li impone)
+            try:
+                return self.tg.send_message(text, chat_id=chat_id)
+            except Exception:
+                pass
+    # --------------------------------------------------------------------
+
     def _is_admin(self, user_id: int) -> bool:
         return int(user_id) == int(self.cfg.ADMIN_ID)
 
@@ -84,12 +100,12 @@ class CommandsLoop:
         for b in blocks:
             if total_len + len(b) + 2 > page_size:
                 if page:
-                    self.tg.send_message("\n\n".join(page), chat_id=chat_id)
+                    self._send(chat_id, "\n\n".join(page))
                 page = [b]; total_len = len(b) + 2
             else:
                 page.append(b); total_len += len(b) + 2
         if page:
-            self.tg.send_message("\n\n".join(page), chat_id=chat_id)
+            self._send(chat_id, "\n\n".join(page))
 
     def _handle_quote(self, chat_id: int, mode: str):
         now = datetime.now(ZoneInfo(self.cfg.TZ)).date()
@@ -114,12 +130,12 @@ class CommandsLoop:
         try:
             plan = plan_day(self.api, self.cfg, date_str, want_long_legs=10)
         except Exception as e:
-            self.tg.send_message(f"❌ Errore planner: {e}", chat_id=chat_id)
+            self._send(chat_id, f"❌ Errore planner: {e}")
             return
 
         blocks = render_plan_blocks(self.api, self.cfg, plan)
         if not blocks:
-            self.tg.send_message(f"Nessuna giocata valida per {date_str}.", chat_id=chat_id)
+            self._send(chat_id, f"Nessuna giocata valida per {date_str}.")
             return
 
         # preview in DM
@@ -129,10 +145,13 @@ class CommandsLoop:
         if publish:
             channel_id = getattr(self.cfg, "CHANNEL_ID", None)
             if not channel_id:
-                self.tg.send_message("⚠️ CHANNEL_ID non configurato: salto pubblicazione.", chat_id=chat_id)
+                self._send(chat_id, "⚠️ CHANNEL_ID non configurato: salto pubblicazione.")
                 return
             for b in blocks:
-                self.tg.send_message(b, chat_id=channel_id)
+                try:
+                    self._send(channel_id, b)
+                except Exception:
+                    pass
 
     def handle_update(self, upd: Dict[str, Any]):
         msg = upd.get("message") or upd.get("edited_message")
@@ -145,15 +164,15 @@ class CommandsLoop:
             return
 
         if not self._is_admin(user_id):
-            self.tg.send_message("❌ Non autorizzato.", chat_id=chat_id); return
+            self._send(chat_id, "❌ Non autorizzato."); return
 
         low = text.lower()
         if low.startswith("/start"):
-            self.tg.send_message("Benvenuto! /quote per quote Bet365, /plan per anteprima giocate.", chat_id=chat_id); return
+            self._send(chat_id, "Benvenuto! /quote per quote Bet365, /plan per anteprima giocate."); return
         if low.startswith("/help"):
-            self.tg.send_message("Comandi: /quote [today|tomorrow|all], /plan [today|tomorrow], /plan_publish [today|tomorrow], /preview_today, /cancel ID, /cancel_all, /regen, /rebuild_watchlist, /watchlist", chat_id=chat_id); return
+            self._send(chat_id, "Comandi: /quote [today|tomorrow|all], /plan [today|tomorrow], /plan_publish [today|tomorrow], /preview_today, /cancel ID, /cancel_all, /regen, /rebuild_watchlist, /watchlist"); return
         if low.startswith("/ping"):
-            self.tg.send_message("pong ✅", chat_id=chat_id); return
+            self._send(chat_id, "pong ✅"); return
 
         if low.startswith("/quote"):
             parts = text.split()
@@ -182,7 +201,7 @@ class CommandsLoop:
         if low.startswith("/preview_today"):
             rows = list_today()
             if not rows:
-                self.tg.send_message("Nessuna schedina pianificata oggi.", chat_id=chat_id); return
+                self._send(chat_id, "Nessuna schedina pianificata oggi."); return
             tz = ZoneInfo(self.cfg.TZ)
             out = []
             for r in rows:
@@ -199,32 +218,38 @@ class CommandsLoop:
 
         if low.startswith("/cancel_all"):
             n = cancel_all_today()
-            self.tg.send_message(f"🛑 Cancellate <b>{n}</b> schedine in coda oggi.", chat_id=chat_id); return
+            self._send(chat_id, f"🛑 Cancellate <b>{n}</b> schedine in coda oggi."); return
 
         if low.startswith("/cancel"):
             parts = text.split()
             if len(parts) < 2:
-                self.tg.send_message("Uso: /cancel ID", chat_id=chat_id); return
+                self._send(chat_id, "Uso: /cancel ID"); return
             sid = parts[1].strip()
             n = cancel_by_short_id(sid)
-            self.tg.send_message("✅ Annullata." if n > 0 else "❌ ID non trovato o già inviata.", chat_id=chat_id); return
+            self._send(chat_id, "✅ Annullata." if n > 0 else "❌ ID non trovato o già inviata."); return
 
         if low.startswith("/regen"):
             try:
                 planner = DailyPlanner(self.cfg, self.tg, self.api, None)
                 planner.run_08_tasks()
-                self.tg.send_message("🔧 Pianificazione del giorno rigenerata (con report).", chat_id=chat_id)
+                self._send(chat_id, "🔧 Pianificazione del giorno rigenerata (con report).")
             except Exception as e:
-                self.tg.send_message(f"Errore rigenerazione: {e}", chat_id=chat_id)
+                self._send(chat_id, f"Errore rigenerazione: {e}")
             return
 
         if low.startswith("/rebuild_watchlist"):
             try:
                 la = LiveAlerts(self.cfg, self.tg, self.api)
-                la.build_morning_watchlist()
-                self.tg.send_message("✅ Watchlist ricostruita.", chat_id=chat_id)
-            except Exception as e:
-                self.tg.send_message(f"Errore watchlist: {e}", chat_id=chat_id)
+            except Exception:
+                la = None
+            if la:
+                try:
+                    la.build_morning_watchlist()
+                    self._send(chat_id, "✅ Watchlist ricostruita.")
+                except Exception as e:
+                    self._send(chat_id, f"Errore watchlist: {e}")
+            else:
+                self._send(chat_id, "Errore: modulo live alerts non disponibile.")
             return
 
         if low.startswith("/watchlist"):
@@ -233,17 +258,17 @@ class CommandsLoop:
                 la.build_morning_watchlist()
                 rows = getattr(la, "watch", {})
                 if not rows:
-                    self.tg.send_message("Nessuna favorita da monitorare.", chat_id=chat_id); return
+                    self._send(chat_id, "Nessuna favorita da monitorare."); return
                 out = []
                 for fid, rec in rows.items():
                     out.append(f"• {rec['league']} — {rec['fav_name']} vs {rec['other_name']} (pre {rec['pre_odd']:.2f})")
-                self.tg.send_message("<b>Favorite monitorate (≤1.26)</b>\n" + "\n".join(out), chat_id=chat_id)
+                self._send(chat_id, "<b>Favorite monitorate (≤1.26)</b>\n" + "\n".join(out))
             except Exception as e:
-                self.tg.send_message(f"Errore watchlist: {e}", chat_id=chat_id)
+                self._send(chat_id, f"Errore watchlist: {e}")
             return
         # -----------------------
 
-        self.tg.send_message("Comando non riconosciuto. Usa /help", chat_id=chat_id)
+        self._send(chat_id, "Comando non riconosciuto. Usa /help")
 
     def run_forever(self):
         off = self._offset
@@ -255,10 +280,5 @@ class CommandsLoop:
                     if upid > off:
                         off = upid; self._offset = off
                     self.handle_update(u)
-            except Exception as e:
-                # PATCH: visibilità errori
-                try:
-                    self.tg.send_message(f"[commands-loop] errore: {e}", chat_id=self.cfg.ADMIN_ID)
-                except Exception:
-                    pass
+            except Exception:
                 import time; time.sleep(2)
