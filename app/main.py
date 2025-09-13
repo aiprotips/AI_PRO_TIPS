@@ -1,8 +1,9 @@
-# app/main.py — entrypoint con Comandi + Live Alerts
+# app/main.py — aggiunta disable webhook al boot
 import threading
 import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+import requests  # <--- per deleteWebhook
 
 from .config import Config
 from .telegram_client import TelegramClient
@@ -15,7 +16,15 @@ def main():
     tg  = TelegramClient(cfg.TELEGRAM_TOKEN)
     api = APIFootball(cfg.APIFOOTBALL_KEY, tz=cfg.TZ)
 
+    # PATCH: disattiva webhook se mai fosse stato impostato
+    try:
+        requests.get(f"https://api.telegram.org/bot{cfg.TELEGRAM_TOKEN}/deleteWebhook", timeout=5)
+    except Exception:
+        pass
+
     print("[BOOT] Odds bot pronto. Comandi: /quote [today|tomorrow], /plan, live alerts ON")
+
+    # ... (il resto del tuo main rimane uguale) ...
 
     # --- Loop comandi (DM admin) ---
     cmd_loop = CommandsLoop(cfg, tg, api)
