@@ -1,6 +1,6 @@
 # app/live_alerts.py
 # Live Alerts — favorita pre ≤ 1.26 che va sotto entro 20' senza rosso
-# Doppio controllo a 60s e invio DM all'ADMIN_ID (per ora non al canale).
+# Doppio controllo a 60s. Ora invia DM all'ADMIN_ID e anche nel canale (se CHANNEL_ID è configurato).
 
 from __future__ import annotations
 from typing import Dict, Any, Tuple
@@ -23,7 +23,6 @@ def _parse_match_winner_from_odds(odds_resp: list) -> Dict[str, float]:
     """
     out = {}
     try:
-        # odds_resp: [ { fixture, bookmakers:[{ name, lastUpdate, bets:[{name,values:[{value,odd}]}] }]} ]
         for entry in odds_resp:
             for bm in entry.get("bookmakers", []) or []:
                 name = _norm(bm.get("name",""))
@@ -50,9 +49,7 @@ def _parse_match_winner_from_odds(odds_resp: list) -> Dict[str, float]:
         return out
 
 def _has_red_card_for(team_name: str, events_resp: Dict[str, Any]) -> bool:
-    """
-    Controlla se il team_name ha ricevuto un rosso negli events del fixture.
-    """
+    """Controlla se team_name ha ricevuto un rosso negli events del fixture."""
     try:
         events = events_resp.get("response", []) or []
         for ev in events:
@@ -71,7 +68,7 @@ class LiveAlerts:
       la.build_morning_watchlist()       # chiamalo alle 08:00 locali
       la.run_forever()                   # in un thread dedicato
 
-    Per ora invia SOLO all'ADMIN_ID (DM). In futuro potrai usare CHANNEL_ID.
+    Ora invia anche nel canale (se CHANNEL_ID è configurato).
     """
 
     def __init__(self, cfg, tg, api):
@@ -158,9 +155,7 @@ class LiveAlerts:
             pass
 
     def _fixture_losing_info(self, fx: Dict[str, Any], fav_side: str) -> Tuple[bool, int]:
-        """
-        Ritorna (is_losing, minute) per la favorita nel fixture fx.
-        """
+        """Ritorna (is_losing, minute) per la favorita nel fixture fx."""
         try:
             info = fx.get("fixture", {}) or {}
             minute = int(((info.get("status", {}) or {}).get("elapsed") or 0))
@@ -191,21 +186,29 @@ class LiveAlerts:
         except Exception:
             return None
 
-    def _send_admin_alert(self, rec: Dict[str, Any], fid: int, minute: int, live_price: float | None):
+    def _send_alert(self, rec: Dict[str, Any], fid: int, minute: int, live_price: float | None):
         fav = rec["fav_name"]; other = rec["other_name"]
         pre = rec["pre_odd"]
         league = rec["league"]
         lp_str = f"{live_price:.2f}" if isinstance(live_price, (int,float)) else "n/d"
         msg = (
-            f"⚡ <b>LIVE ALERT</b> — favorita sotto\n\n"
+            f"⚡ <b>LIVE ALERT</b>\n\n"
             f"[{league}]\n"
-            f"⏱️ {minute}' — {fav} sotto contro {other}\n"
+            f"⏱️ {minute}' — la favorita <b>{fav}</b> è sotto contro {other}\n"
             f"Pre-match: <b>{pre:.2f}</b>  |  Live ML: <b>{lp_str}</b>\n\n"
-            f"👉 Consiglio live: vittoria <b>{fav}</b> (entry spot)\n"
-            f"(verifica doppia effettuata)"
+            f"🎯 Idea ingresso: vittoria <b>{fav}</b> (spot live)\n"
+            f"(doppio check eseguito)"
         )
+        # invia DM all'admin
         try:
             self.tg.send_message(self.cfg.ADMIN_ID, msg)
+        except Exception:
+            pass
+        # invia nel canale se configurato
+        try:
+            channel_id = getattr(self.cfg, "CHANNEL_ID", None)
+            if channel_id:
+                self.tg.send_message(channel_id, msg)
         except Exception:
             pass
 
@@ -238,15 +241,13 @@ class LiveAlerts:
             losing2, minute2 = self._fixture_losing_info(fx2, fav_side)
             if losing2 and minute2 <= EARLY_MINUTE_MAX and self._no_red_for_fav(fid, fav_name):
                 live_price = self._current_live_price_for_fav(fid, fav_side)
-                self._send_admin_alert(rec, fid, minute2, live_price)
+                self._send_alert(rec, fid, minute2, live_price)
                 self.alerted.add(fid)
             # cleanup pending (sia che alerti, sia che no; se continua losing, rifarà pending al prossimo giro)
             self.pending_check.pop(fid, None)
 
     def tick(self):
-        """
-        Un giro di controllo live; da richiamare periodicamente (es. ogni 25s).
-        """
+        """Un giro di controllo live; da richiamare periodicamente (es. ogni 25s)."""
         try:
             lives = self.api.live_fixtures()
         except Exception:
