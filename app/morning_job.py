@@ -66,7 +66,7 @@ def run_morning(cfg, tg, api):
         blocks.append({
             "kind": "single",
             "legs": [s],
-            "payload": render_value_single(s["home"], s["away"], s["pick"], float(s["odds"]), s.get("kickoff_local", _kickoff_local_str(first_local)), link),
+            "payload": render_value_single(s["home"], s["away"], s["market"], float(s["odd"]), s.get("kickoff_local", _kickoff_local_str(first_local)), link),
             "first_local": first_local
         })
     # multiple
@@ -85,7 +85,7 @@ def run_morning(cfg, tg, api):
     push_combo("doppia", "double", "🧩 <b>DOPPIA</b> 🧩")
     push_combo("tripla", "triple", "🎻 <b>TRIPLA</b> 🎻")
     push_combo("quintupla", "quint", "🎬 <b>QUINTUPLA</b> 🎬")
-    push_combo("supercombo", "long", "💎 <b>SUPER COMBO</b> 💎")
+    push_combo("long", "long", "💎 <b>SUPER COMBO</b> 💎")
 
     if not blocks:
         _safe_send(tg, int(cfg.ADMIN_ID), "<b>📋 Report 08:00</b>\nNessuna schedina pianificata oggi.")
@@ -106,7 +106,7 @@ def run_morning(cfg, tg, api):
         code = f"{today.replace('-','')}-{sid}"
         legs = b["legs"]
         total_odds = 1.0
-        for l in legs: total_odds *= float(l["odds"])
+        for l in legs: total_odds *= float(l["odd"])
         bet_id = create_betslip(code, 
                                 {"single":"single","double":"double","triple":"triple","quint":"quint","long":"long"}[b["kind"]],
                                 today, float(total_odds), len(legs))
