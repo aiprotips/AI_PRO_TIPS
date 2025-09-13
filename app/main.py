@@ -29,6 +29,10 @@ def main():
 
     print("[BOOT] Odds bot pronto. Comandi: /quote [today|tomorrow], /plan, live alerts ON")
 
+    # --- Guardie runtime per avvio thread dipendenti da DB/CHANNEL ---
+    has_db = bool(getattr(cfg, "DATABASE_URL", None) or getattr(cfg, "MYSQL_URL", None))
+    has_channel = bool(getattr(cfg, "CHANNEL_ID", None))
+
     # --- Loop comandi (DM admin) ---
     cmd_loop = CommandsLoop(cfg, tg, api)
 
@@ -112,9 +116,17 @@ def main():
     threading.Thread(target=loop_commands, daemon=True).start()
     threading.Thread(target=loop_live_alerts, daemon=True).start()
     threading.Thread(target=loop_daily_watchlist, daemon=True).start()
-    threading.Thread(target=loop_morning_scheduler, daemon=True).start()  # NEW
-    threading.Thread(target=loop_publisher, daemon=True).start()          # NEW
-    threading.Thread(target=loop_closer, daemon=True).start()             # NEW
+
+    # Avvio condizionato: questi richiedono DB/CHANNEL
+    if has_db:
+        threading.Thread(target=loop_morning_scheduler, daemon=True).start()  # NEW
+        threading.Thread(target=loop_closer, daemon=True).start()             # NEW
+        if has_channel:
+            threading.Thread(target=loop_publisher, daemon=True).start()      # NEW
+        else:
+            print("[boot] CHANNEL_ID assente: publisher DISABILITATO")
+    else:
+        print("[boot] DB assente: morning_job/closer/publisher DISABILITATI")
 
     # keep alive (il processo Railway deve restare vivo)
     while True:
