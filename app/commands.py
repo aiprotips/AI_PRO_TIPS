@@ -12,6 +12,11 @@ from .leagues import allowed_league, label_league
 # nuovi import per il planner
 from .value_builder import plan_day, render_plan_blocks
 
+# --- PATCH: repo scheduler & planner/watchlist ---
+from .repo_sched import list_today, cancel_by_short_id, cancel_all_today  # patch
+from .planner import DailyPlanner                                         # patch
+from .live_alerts import LiveAlerts                                       # patch
+
 def _to_local_hhmm(iso: str, tz: str) -> str:
     try:
         dt = duparser.isoparse(iso)
@@ -170,6 +175,74 @@ class CommandsLoop:
             if when not in ("today","tomorrow"):
                 when = "today"
             self._handle_plan(chat_id, publish=False, when=when); return
+
+        # -----------------------
+        # PATCH: nuovi comandi admin
+        # -----------------------
+        if low.startswith("/preview_today"):
+            rows = list_today()
+            if not rows:
+                self.tg.send_message(chat_id, "Nessuna schedina pianificata oggi."); return
+            tz = ZoneInfo(self.cfg.TZ)
+            out = []
+            for r in rows:
+                when = r.get("send_at_utc")
+                # normalizza datetime/str in locale
+                try:
+                    if isinstance(when, datetime):
+                        when_local = when.replace(tzinfo=ZoneInfo("UTC")).astimezone(tz).strftime("%H:%M")
+                    else:
+                        when_local = datetime.fromisoformat(str(when)).replace(tzinfo=ZoneInfo("UTC")).astimezone(tz).strftime("%H:%M")
+                except Exception:
+                    when_local = "n/d"
+                out.append(f"ID <b>{r['short_id']}</b> — {r['kind']} — invio: <b>{when_local}</b>\n\n{r['payload']}")
+            self._send_paginated(chat_id, out); return
+
+        if low.startswith("/cancel_all"):
+            n = cancel_all_today()
+            self.tg.send_message(chat_id, f"🛑 Cancellate <b>{n}</b> schedine in coda oggi."); return
+
+        if low.startswith("/cancel"):
+            parts = text.split()
+            if len(parts) < 2:
+                self.tg.send_message(chat_id, "Uso: /cancel ID"); return
+            sid = parts[1].strip()
+            n = cancel_by_short_id(sid)
+            self.tg.send_message(chat_id, "✅ Annullata." if n > 0 else "❌ ID non trovato o già inviata."); return
+
+        if low.startswith("/regen"):
+            try:
+                planner = DailyPlanner(self.cfg, self.tg, self.api, None)
+                planner.run_08_tasks()
+                self.tg.send_message(chat_id, "🔧 Pianificazione del giorno rigenerata (con report).")
+            except Exception as e:
+                self.tg.send_message(chat_id, f"Errore rigenerazione: {e}")
+            return
+
+        if low.startswith("/rebuild_watchlist"):
+            try:
+                la = LiveAlerts(self.cfg, self.tg, self.api)
+                la.build_morning_watchlist()
+                self.tg.send_message(chat_id, "✅ Watchlist ricostruita.")
+            except Exception as e:
+                self.tg.send_message(chat_id, f"Errore watchlist: {e}")
+            return
+
+        if low.startswith("/watchlist"):
+            try:
+                la = LiveAlerts(self.cfg, self.tg, self.api)
+                la.build_morning_watchlist()
+                rows = getattr(la, "watch", {})
+                if not rows:
+                    self.tg.send_message(chat_id, "Nessuna favorita da monitorare."); return
+                out = []
+                for fid, rec in rows.items():
+                    out.append(f"• {rec['league']} — {rec['fav_name']} vs {rec['other_name']} (pre {rec['pre_odd']:.2f})")
+                self.tg.send_message(chat_id, "<b>Favorite monitorate (≤1.26)</b>\n" + "\n".join(out))
+            except Exception as e:
+                self.tg.send_message(chat_id, f"Errore watchlist: {e}")
+            return
+        # -----------------------
 
         self.tg.send_message(chat_id, "Comando non riconosciuto. Usa /help")
 
