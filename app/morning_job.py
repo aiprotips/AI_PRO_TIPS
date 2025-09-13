@@ -39,11 +39,17 @@ def _kickoff_local_str(dt: datetime) -> str:
     except Exception: return "n/d"
 
 def _safe_send(tg, chat_id: int, text: str):
-    try: return tg.send_message(text, chat_id=chat_id)
-    except TypeError: return tg.send_message(chat_id, text)
+    try: 
+        # firma corretta: (chat_id, text)
+        return tg.send_message(chat_id, text)
+    except TypeError: 
+        # fallback: (text, chat_id=...)
+        return tg.send_message(text, chat_id=chat_id)
     except Exception:
-        try: return tg.send_message(text, chat_id=chat_id)
-        except Exception: pass
+        try: 
+            return tg.send_message(chat_id, text)
+        except Exception: 
+            pass
 
 def run_morning(cfg, tg, api):
     tz = getattr(cfg, "TZ", "Europe/Rome")
