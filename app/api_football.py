@@ -61,6 +61,16 @@ class APIFootball:
         js = self._get("/odds", {"fixture": fixture_id, "bookmaker": BET365_ID})
         return js.get("response", []) or []
 
+    # === NEW: Live fixtures e lookup singolo per Live Alerts ===
+    def live_fixtures(self) -> List[Dict]:
+        js = self._get("/fixtures", {"live": "all"})
+        return js.get("response", []) or []
+
+    def fixture_by_id(self, fid: int) -> Dict[str, Any]:
+        js = self._get("/fixtures", {"id": fid})
+        resp = js.get("response", []) or []
+        return resp[0] if resp else {}
+
     # -------- Helpers parsing --------
     @staticmethod
     def _put(out: Dict[str, float], key: str, val):
