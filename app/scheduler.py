@@ -12,7 +12,7 @@ class ScheduledPublisher:
         for r in rows:
             try:
                 # invio sul canale
-                self.tg.send_message(r["payload"], chat_id=self.cfg.CHANNEL_ID, disable_web_page_preview=True)
+                self.tg.send_message(self.cfg.CHANNEL_ID, r["payload"], disable_web_page_preview=True)
                 mark_sent(int(r["id"]))
             except Exception as e:
                 # lascio in coda; riproverà al prossimo giro
