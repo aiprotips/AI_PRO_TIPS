@@ -1,4 +1,4 @@
-# app/live_alerts.py — usa LIVE_POLL_SECONDS da env
+# app/live_alerts.py
 from __future__ import annotations
 from typing import Dict, Any, Tuple
 import time
@@ -84,13 +84,9 @@ class LiveAlerts:
         except Exception:
             fixtures = []
 
-        try:
-            from .leagues import allowed_league
-            def league_ok(lg):
-                return allowed_league(lg.get("country",""), lg.get("name",""))
-        except Exception:
-            def league_ok(lg):
-                return True
+        # CHANGED: nessun filtro per lega — live alerts su tutte le competizioni
+        def league_ok(_lg):  # prima: allowed_league(...)
+            return True
 
         count = 0
         for fx in fixtures:
