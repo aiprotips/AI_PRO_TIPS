@@ -1,4 +1,4 @@
-# app/commands.py — PATCH MINIMA (_send + /regen)
+# app/commands.py — /regen usa lo stesso job delle 08:00 + _send robusto
 from typing import Dict, Any, List
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -9,13 +9,9 @@ from .telegram_client import TelegramClient
 from .api_football import APIFootball
 from .leagues import allowed_league, label_league
 
-# nuovi import per il planner
 from .value_builder import plan_day, render_plan_blocks
-
-# --- PATCH: repo scheduler & planner/watchlist ---
-from .repo_sched import list_today, cancel_by_short_id, cancel_all_today  # patch
-# from .planner import DailyPlanner   # ⛔️ RIMOSSO: usiamo run_morning
-from .live_alerts import LiveAlerts                                       # patch
+from .repo_sched import list_today, cancel_by_short_id, cancel_all_today
+from .live_alerts import LiveAlerts
 
 def _to_local_hhmm(iso: str, tz: str) -> str:
     try:
@@ -44,15 +40,13 @@ def _format_markets(mk: Dict[str, float]) -> List[str]:
     r4 = [f"{k.replace(' ', '')}: {mk[k]}" for k in ("Under 2.5","Under 3.5") if k in mk]
     if r4: lines.append(" | ".join(r4))
     r5 = [f"{k}: {mk[k]}" for k in ("Gol","No Gol") if k in mk]
-    if r5: lines.append(" | ".join(r5))
     return lines
 
 def _render_day(api: APIFootball, cfg: Config, date_str: str) -> List[str]:
-    entries = api.entries_by_date_bet365(date_str)  # usa paginazione + fallback
+    entries = api.entries_by_date_bet365(date_str)
     parsed = [p for p in entries if allowed_league(p["league_country"], p["league_name"])]
     if not parsed:
         return [f"<b>{date_str}</b> — Nessuna quota Bet365 disponibile per i campionati whitelisted."]
-
     grouped = _group_by_league(parsed)
     messages = []
     for league, rows in grouped.items():
@@ -75,7 +69,6 @@ class CommandsLoop:
         self.api = api
         self._offset = 0
 
-    # ---------- PATCH: invio robusto ----------
     def _send(self, chat_id: int, text: str):
         try:
             return self.tg.send_message(chat_id, text)  # firma corretta
@@ -86,7 +79,6 @@ class CommandsLoop:
                 return self.tg.send_message(chat_id, text)
             except Exception:
                 pass
-    # -----------------------------------------
 
     def _is_admin(self, user_id: int) -> bool:
         return int(user_id) == int(self.cfg.ADMIN_ID)
@@ -135,10 +127,8 @@ class CommandsLoop:
             self._send(chat_id, f"Nessuna giocata valida per {date_str}.")
             return
 
-        # preview in DM
         self._send_paginated(chat_id, [f"<b>PLAN {date_str}</b>"] + blocks)
 
-        # publish se richiesto
         if publish:
             channel_id = getattr(self.cfg, "CHANNEL_ID", None)
             if not channel_id:
@@ -192,9 +182,6 @@ class CommandsLoop:
                 when = "today"
             self._handle_plan(chat_id, publish=False, when=when); return
 
-        # -----------------------
-        # PATCH: nuovi comandi admin
-        # -----------------------
         if low.startswith("/preview_today"):
             rows = list_today()
             if not rows:
@@ -227,7 +214,7 @@ class CommandsLoop:
 
         if low.startswith("/regen"):
             try:
-                from .morning_job import run_morning  # usa lo stesso job delle 08:00
+                from .morning_job import run_morning
                 run_morning(self.cfg, self.tg, self.api)
                 self._send(chat_id, "🔧 Pianificazione del giorno rigenerata (con report).")
             except Exception as e:
@@ -263,7 +250,6 @@ class CommandsLoop:
             except Exception as e:
                 self._send(chat_id, f"Errore watchlist: {e}")
             return
-        # -----------------------
 
         self._send(chat_id, "Comando non riconosciuto. Usa /help")
 
