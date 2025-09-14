@@ -1,4 +1,4 @@
-# app/live_alerts.py
+# app/live_alerts.py — usa LIVE_POLL_SECONDS da env
 from __future__ import annotations
 from typing import Dict, Any, Tuple
 import time
@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 PRE_FAV_MAX = 1.26
 EARLY_MINUTE_MAX = 20
 DOUBLECHECK_SECONDS = 60
-POLL_SECONDS = 25
+POLL_SECONDS = 25  # default
 
 def _norm(s: str) -> str:
     return (s or "").strip().lower()
@@ -25,8 +25,7 @@ def _parse_match_winner_from_odds(odds_resp: list) -> Dict[str, float]:
                     bname = _norm(bet.get("name",""))
                     if bname in ("match winner","winner"):
                         for v in bet.get("values", []) or []:
-                            val = _norm(v.get("value",""))
-                            odd = v.get("odd")
+                            val = _norm(v.get("value","")); odd = v.get("odd")
                             try:
                                 x = float(odd)
                             except:
@@ -55,10 +54,8 @@ def _has_red_card_for(team_name: str, events_resp: Dict[str, Any]) -> bool:
 
 def _safe_send(tg, chat_id: int, text: str):
     try:
-        # firma corretta: (chat_id, text)
         return tg.send_message(chat_id, text)
     except TypeError:
-        # fallback: (text, chat_id=...)
         return tg.send_message(text, chat_id=chat_id)
     except Exception:
         try:
@@ -75,7 +72,6 @@ class LiveAlerts:
         self.watch: Dict[int, Dict[str, Any]] = {}
         self.pending_check: Dict[int, float] = {}
         self.alerted: set[int] = set()
-        # NEW: polling configurabile da ENV, fallback a costante
         self.poll_seconds = int(getattr(cfg, "LIVE_POLL_SECONDS", POLL_SECONDS))
 
     def _now_local(self) -> datetime:
@@ -135,7 +131,7 @@ class LiveAlerts:
             }
             count += 1
 
-        _safe_send(self.tg, self.cfg.ADMIN_ID, f"🔎 LiveAlerts: watchlist caricata ({count} favorite ≤ {PRE_FAV_MAX}).")
+        _safe_send(self.tg, int(self.cfg.ADMIN_ID), f"🔎 LiveAlerts: watchlist caricata ({count} favorite ≤ {PRE_FAV_MAX}).")
 
     def _fixture_losing_info(self, fx: Dict[str, Any], fav_side: str) -> Tuple[bool, int]:
         try:
@@ -176,12 +172,10 @@ class LiveAlerts:
             f"🎯 Idea ingresso: vittoria <b>{fav}</b> (spot live)\n"
             f"(doppio check eseguito)"
         )
-        # DM admin
-        _safe_send(self.tg, self.cfg.ADMIN_ID, msg)
-        # canale (se configurato)
+        _safe_send(self.tg, int(self.cfg.ADMIN_ID), msg)
         channel_id = getattr(self.cfg, "CHANNEL_ID", None)
         if channel_id:
-            _safe_send(self.tg, channel_id, msg)
+            _safe_send(self.tg, int(channel_id), msg)
 
     def _handle_live_fixture(self, fx: Dict[str, Any]):
         fid = int((fx.get("fixture", {}) or {}).get("id") or 0)
