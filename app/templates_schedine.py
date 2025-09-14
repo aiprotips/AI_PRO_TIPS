@@ -45,7 +45,7 @@ def render_value_single(home: str, away: str, pick: str, odd: float, kickoff_loc
 # ------------------------------
 def render_multipla(title: str, selections: List[Dict[str, Any]], total_odds: float, kickoff_local: str, link: str) -> str:
     body = "\n".join(
-        f"• {_html(s['home'])} 🆚 {_html(s['away'])}\n   🎯 {_html(s['pick'])} — <b>{float(s['odd']):.2f}</b>"
+        f"• {_html(s['home'])} 🆚 {_html(s['away'])}\n   🎯 {_html(s['market'])} — <b>{float(s['odd']):.2f}</b>"
         for s in selections
     )
     outro_pool = [
