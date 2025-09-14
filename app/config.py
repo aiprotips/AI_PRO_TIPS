@@ -17,7 +17,7 @@ class Config:
 
         self.TZ = os.getenv("TZ", "Europe/Rome")
         self.PAGE_SIZE = int(os.getenv("PAGE_SIZE", "3500"))
-        self.PUBLIC_LINK = os.getenv("PUBLIC_LINK", "https://t.me/AIProTips")
+        self.PUBLIC_LINK = os.getenv("PUBLIC_LINK", "https://short-url.org/1eygc")
 
         self.LIVE_POLL_SECONDS = int(os.getenv("LIVE_POLL_SECONDS", "25"))
         qh = os.getenv("QUIET_HOURS", "0,8").split(",")
