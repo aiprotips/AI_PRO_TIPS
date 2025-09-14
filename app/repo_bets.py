@@ -99,7 +99,7 @@ def add_selection(betslip_id: int, leg: Dict[str, Any], tz: str):
     with get_conn() as c, c.cursor() as cur:
         cur.execute(sql, (
             betslip_id, int(leg["fixture_id"]), leg["league_country"], leg["league_name"],
-            leg["home"], leg["away"], leg["pick"], float(leg["odds"]), kickoff_at
+            leg["home"], leg["away"], leg["market"], float(leg["odd"]), kickoff_at
         ))
 
 def mark_betslip_sent(betslip_id: int):
