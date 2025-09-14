@@ -60,28 +60,39 @@ def run_morning(cfg, tg, api):
     # blocchi per messaggi + calcolo orari invio
     link = getattr(cfg, "PUBLIC_LINK", "https://t.me/AIProTips")
     blocks = []  # [{kind, legs, payload, first_local}]
-    # singole
+
+    # singole (market/odd)
     for s in plan.get("singole") or []:
         first_local = _parse_iso_local(s.get("kickoff_iso",""), tz) or datetime.now(tzinfo).replace(hour=11, minute=0, second=0, microsecond=0)
         blocks.append({
             "kind": "single",
             "legs": [s],
-            "payload": render_value_single(s["home"], s["away"], s["market"], float(s["odd"]), s.get("kickoff_local", _kickoff_local_str(first_local)), link),
+            "payload": render_value_single(
+                s["home"], s["away"], s["market"], float(s["odd"]),
+                s.get("kickoff_local", _kickoff_local_str(first_local)), link
+            ),
             "first_local": first_local
         })
-    # multiple
+
+    # multiple: il planner restituisce LISTE di legs
     def push_combo(key, kind, title):
-        blk = plan.get(key)
-        if not blk: return
-        legs = blk.get("legs") or []; 
-        if not legs: return
+        legs = plan.get(key) or []
+        if not legs: 
+            return
         first_local = _first_kickoff_local(legs, tz) or datetime.now(tzinfo).replace(hour=11, minute=0, second=0, microsecond=0)
+        total_odds = 1.0
+        for l in legs:
+            try:
+                total_odds *= float(l["odd"])
+            except Exception:
+                pass
         blocks.append({
             "kind": kind,
             "legs": legs,
-            "payload": render_multipla(title, legs, float(blk["total_odds"]), blk.get("kickoff_local", _kickoff_local_str(first_local)), link),
+            "payload": render_multipla(title, legs, float(total_odds), _kickoff_local_str(first_local), link),
             "first_local": first_local
         })
+
     push_combo("doppia", "double", "🧩 <b>DOPPIA</b> 🧩")
     push_combo("tripla", "triple", "🎻 <b>TRIPLA</b> 🎻")
     push_combo("quintupla", "quint", "🎬 <b>QUINTUPLA</b> 🎬")
@@ -102,21 +113,23 @@ def run_morning(cfg, tg, api):
         enqueue(sid, b["kind"], b["payload"], send_at_utc)
         planned.append((sid, b["kind"], first_local))
 
-        # scrivi DB betslip + selections per tracking
+        # DB betslip + selections
         code = f"{today.replace('-','')}-{sid}"
         legs = b["legs"]
         total_odds = 1.0
-        for l in legs: total_odds *= float(l["odd"])
-        bet_id = create_betslip(code, 
-                                {"single":"single","double":"double","triple":"triple","quint":"quint","long":"long"}[b["kind"]],
-                                today, float(total_odds), len(legs))
+        for l in legs: 
+            total_odds *= float(l["odd"])
+        bet_id = create_betslip(
+            code,
+            {"single":"single","double":"double","triple":"triple","quint":"quint","long":"long"}[b["kind"]],
+            today, float(total_odds), len(legs)
+        )
         for l in legs:
             add_selection(bet_id, l, tz)
 
-    # report
+    # report DM admin
     lines = ["<b>📋 Report 08:00</b>", "<b>Schedine pianificate</b>"]
     for sid, kind, fl in planned:
-        # mostra orario locale di invio (fl - 3h, clamp >= 08:00)
         send_loc = max(fl - timedelta(hours=3), fl.replace(hour=8, minute=0, second=0, microsecond=0))
         lines.append(f"ID <b>{sid}</b> — {kind} — invio: <b>{send_loc.strftime('%H:%M')}</b>")
     _safe_send(tg, int(cfg.ADMIN_ID), "\n".join(lines))
