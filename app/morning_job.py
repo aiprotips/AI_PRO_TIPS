@@ -1,10 +1,10 @@
-# app/morning_job.py
+# app/morning_job.py — usa market/odd + chiave long + compute total corretto
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from .value_builder import plan_day   # usa il tuo planner
+from .value_builder import plan_day
 from .templates_schedine import render_value_single, render_multipla
 from .repo_sched import ensure_table, enqueue
 from .repo_bets import ensure_tables as ensure_bets, create_betslip, add_selection
@@ -39,16 +39,14 @@ def _kickoff_local_str(dt: datetime) -> str:
     except Exception: return "n/d"
 
 def _safe_send(tg, chat_id: int, text: str):
-    try: 
-        # firma corretta: (chat_id, text)
+    try:
         return tg.send_message(chat_id, text)
-    except TypeError: 
-        # fallback: (text, chat_id=...)
+    except TypeError:
         return tg.send_message(text, chat_id=chat_id)
     except Exception:
-        try: 
+        try:
             return tg.send_message(chat_id, text)
-        except Exception: 
+        except Exception:
             pass
 
 def run_morning(cfg, tg, api):
@@ -57,35 +55,26 @@ def run_morning(cfg, tg, api):
     today = datetime.now(tzinfo).strftime("%Y-%m-%d")
     plan = plan_day(api, cfg, today, want_long_legs=10)
 
-    # blocchi per messaggi + calcolo orari invio
     link = getattr(cfg, "PUBLIC_LINK", "https://t.me/AIProTips")
     blocks = []  # [{kind, legs, payload, first_local}]
 
-    # singole (market/odd)
     for s in plan.get("singole") or []:
         first_local = _parse_iso_local(s.get("kickoff_iso",""), tz) or datetime.now(tzinfo).replace(hour=11, minute=0, second=0, microsecond=0)
         blocks.append({
             "kind": "single",
             "legs": [s],
-            "payload": render_value_single(
-                s["home"], s["away"], s["market"], float(s["odd"]),
-                s.get("kickoff_local", _kickoff_local_str(first_local)), link
-            ),
+            "payload": render_value_single(s["home"], s["away"], s["market"], float(s["odd"]), s.get("kickoff_local", _kickoff_local_str(first_local)), link),
             "first_local": first_local
         })
 
-    # multiple: il planner restituisce LISTE di legs
     def push_combo(key, kind, title):
         legs = plan.get(key) or []
-        if not legs: 
-            return
+        if not legs: return
         first_local = _first_kickoff_local(legs, tz) or datetime.now(tzinfo).replace(hour=11, minute=0, second=0, microsecond=0)
         total_odds = 1.0
         for l in legs:
-            try:
-                total_odds *= float(l["odd"])
-            except Exception:
-                pass
+            try: total_odds *= float(l["odd"])
+            except Exception: pass
         blocks.append({
             "kind": kind,
             "legs": legs,
@@ -102,7 +91,6 @@ def run_morning(cfg, tg, api):
         _safe_send(tg, int(cfg.ADMIN_ID), "<b>📋 Report 08:00</b>\nNessuna schedina pianificata oggi.")
         return
 
-    # accoda invii + scrivi DB schedine/selezioni per il Closer
     from .repo_sched import ensure_table as ensure_sched
     ensure_sched(); ensure_bets()
     planned = []
@@ -113,21 +101,14 @@ def run_morning(cfg, tg, api):
         enqueue(sid, b["kind"], b["payload"], send_at_utc)
         planned.append((sid, b["kind"], first_local))
 
-        # DB betslip + selections
         code = f"{today.replace('-','')}-{sid}"
         legs = b["legs"]
         total_odds = 1.0
-        for l in legs: 
-            total_odds *= float(l["odd"])
-        bet_id = create_betslip(
-            code,
-            {"single":"single","double":"double","triple":"triple","quint":"quint","long":"long"}[b["kind"]],
-            today, float(total_odds), len(legs)
-        )
+        for l in legs: total_odds *= float(l["odd"])
+        bet_id = create_betslip(code, {"single":"single","double":"double","triple":"triple","quint":"quint","long":"long"}[b["kind"]], today, float(total_odds), len(legs))
         for l in legs:
             add_selection(bet_id, l, tz)
 
-    # report DM admin
     lines = ["<b>📋 Report 08:00</b>", "<b>Schedine pianificate</b>"]
     for sid, kind, fl in planned:
         send_loc = max(fl - timedelta(hours=3), fl.replace(hour=8, minute=0, second=0, microsecond=0))
