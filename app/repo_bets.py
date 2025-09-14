@@ -1,8 +1,8 @@
-# app/repo_bets.py
+# app/repo_bets.py — unquote credenziali + fallback league_* + ENUM safe
 from __future__ import annotations
 import os
 import pymysql
-from urllib.parse import urlparse, unquote  # <-- unquote aggiunto
+from urllib.parse import urlparse, unquote
 from contextlib import contextmanager
 from typing import Dict, Any, List, Tuple
 
@@ -11,8 +11,8 @@ def _parse_mysql_url(url: str):
     return {
         "host": u.hostname,
         "port": int(u.port or 3306),
-        "user": unquote(u.username) if u.username else "",      # <-- decode username
-        "password": unquote(u.password) if u.password else "",  # <-- decode password
+        "user": unquote(u.username) if u.username else "",
+        "password": unquote(u.password) if u.password else "",
         "db": (u.path or "/")[1:] or "railway",
         "charset": "utf8mb4",
         "cursorclass": pymysql.cursors.DictCursor,
@@ -34,7 +34,6 @@ def get_conn():
         c.close()
 
 def ensure_tables():
-    """Crea le tabelle se mancano (betslips, selections)."""
     ddl_bets = """
     CREATE TABLE IF NOT EXISTS betslips (
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -77,6 +76,9 @@ def ensure_tables():
     with get_conn() as c, c.cursor() as cur:
         cur.execute(ddl_bets)
         cur.execute(ddl_sel)
+        # ENUM safe (no-op se già allineato)
+        cur.execute("ALTER TABLE betslips  MODIFY COLUMN status ENUM('OPEN','SENT','WON','LOST','CANCELLED') NOT NULL DEFAULT 'OPEN'")
+        cur.execute("ALTER TABLE selections MODIFY COLUMN result ENUM('PENDING','WON','LOST','VOID') NOT NULL DEFAULT 'PENDING'")
 
 def create_betslip(code: str, pack_type: str, plan_date: str, total_odds: float, legs_count: int) -> int:
     sql = """INSERT INTO betslips (code, pack_type, plan_date, total_odds, legs_count, status)
@@ -87,7 +89,6 @@ def create_betslip(code: str, pack_type: str, plan_date: str, total_odds: float,
 
 def add_selection(betslip_id: int, leg: Dict[str, Any], tz: str):
     iso = leg.get("kickoff_iso") or ""
-    # kickoff_at salvato come UTC (ISO con Z -> +00:00)
     from datetime import datetime
     try:
         kickoff_at = datetime.fromisoformat(iso.replace("Z","+00:00")).strftime("%Y-%m-%d %H:%M:%S")
@@ -98,9 +99,9 @@ def add_selection(betslip_id: int, leg: Dict[str, Any], tz: str):
              VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)"""
     with get_conn() as c, c.cursor() as cur:
         cur.execute(sql, (
-            + (betslip_id, int(leg["fixture_id"]),
-+  leg.get("league_country", "N/D"), leg.get("league_name", "N/D"),
-+  leg["home"], leg["away"], leg["market"], float(leg["odd"]), kickoff_at)
+            betslip_id, int(leg["fixture_id"]),
+            leg.get("league_country","N/D"), leg.get("league_name","N/D"),
+            leg["home"], leg["away"], leg["market"], float(leg["odd"]), kickoff_at
         ))
 
 def mark_betslip_sent(betslip_id: int):
