@@ -1,27 +1,16 @@
+# app/repo_sched.py — unquote credenziali + anti-duplicati + ENUM safe
 import os
 import pymysql
-from urllib.parse import urlparse, unquote  # <-- unquote aggiunto
+from urllib.parse import urlparse, unquote
 from contextlib import contextmanager
 
-# Tabella di scheduling indipendente dalle tabelle delle schedine/eventi che hai già
-# scheduled_messages:
-#   id BIGINT PK
-#   short_id VARCHAR(8)  -- ID umano (5 cifre)
-#   kind VARCHAR(20)     -- 'single','double','triple','quint','long'
-#   payload MEDIUMTEXT   -- messaggio Telegram già pronto
-#   send_at_utc DATETIME -- quando inviare (UTC)
-#   status ENUM('QUEUED','SENT','CANCELLED')
-#   created_at DATETIME
-#   sent_at DATETIME NULL
-
 def _parse_mysql_url(url: str):
-    # mysql://user:pass@host:port/dbname
     u = urlparse(url)
     return {
         "host": u.hostname,
         "port": int(u.port or 3306),
-        "user": unquote(u.username) if u.username else "",      # <-- decode
-        "password": unquote(u.password) if u.password else "",  # <-- decode
+        "user": unquote(u.username) if u.username else "",
+        "password": unquote(u.password) if u.password else "",
         "db": (u.path or "/")[1:] or "railway",
         "charset": "utf8mb4",
         "cursorclass": pymysql.cursors.DictCursor,
@@ -60,15 +49,24 @@ def ensure_table():
     with get_conn() as c:
         with c.cursor() as cur:
             cur.execute(ddl)
+            # ENUM safe (no-op se già allineato)
+            cur.execute("ALTER TABLE scheduled_messages MODIFY COLUMN status ENUM('QUEUED','SENT','CANCELLED') NOT NULL DEFAULT 'QUEUED'")
 
 def enqueue(short_id: str, kind: str, payload: str, send_at_utc: str):
-    sql = """
-    INSERT INTO scheduled_messages (short_id, kind, payload, send_at_utc, status)
-    VALUES (%s,%s,%s,%s,'QUEUED')
-    """
     with get_conn() as c:
         with c.cursor() as cur:
-            cur.execute(sql, (short_id, kind, payload, send_at_utc))
+            # evita duplicati identici già in coda allo stesso orario
+            cur.execute("""
+                SELECT id FROM scheduled_messages
+                WHERE status='QUEUED' AND kind=%s AND send_at_utc=%s AND payload=%s
+                LIMIT 1
+            """, (kind, send_at_utc, payload))
+            if cur.fetchone():
+                return
+            cur.execute("""
+                INSERT INTO scheduled_messages (short_id, kind, payload, send_at_utc, status)
+                VALUES (%s,%s,%s,%s,'QUEUED')
+            """, (short_id, kind, payload, send_at_utc))
 
 def due_now(limit: int = 10):
     sql = """
