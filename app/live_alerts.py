@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-PRE_FAV_MAX = 1.26
+PRE_FAV_MAX = 1.25
 EARLY_MINUTE_MAX = 20
 DOUBLECHECK_SECONDS = 60
 POLL_SECONDS = 45  # default
