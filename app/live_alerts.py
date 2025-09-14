@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 PRE_FAV_MAX = 1.26
 EARLY_MINUTE_MAX = 20
 DOUBLECHECK_SECONDS = 60
-POLL_SECONDS = 25  # default
+POLL_SECONDS = 45  # default
 
 def _norm(s: str) -> str:
     return (s or "").strip().lower()
