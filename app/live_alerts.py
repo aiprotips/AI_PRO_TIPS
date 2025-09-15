@@ -78,56 +78,59 @@ class LiveAlerts:
         return datetime.now(self.tz)
 
     def build_morning_watchlist(self):
+        """
+        Popola la watchlist leggendo TUTTE le quote Bet365 del giorno
+        (odds-per-data, copertura alta) invece di fare N chiamate per fixture.
+        Restiamo Bet365-only e usiamo la soglia PRE_FAV_MAX.
+        """
         today = self._now_local().strftime("%Y-%m-%d")
         try:
-            fixtures = self.api.fixtures_by_date(today)
+            entries = self.api.entries_by_date_bet365(today)  # lista normalizzata con markets {"1","2",...}
         except Exception:
-            fixtures = []
+            entries = []
 
-        # CHANGED: nessun filtro per lega — live alerts su tutte le competizioni
-        def league_ok(_lg):  # prima: allowed_league(...)
-            return True
-
+        self.watch = {}
         count = 0
-        for fx in fixtures:
-            lg = fx.get("league", {}) or {}
-            if not league_ok(lg):
+        pre_max = PRE_FAV_MAX
+
+        for e in entries:
+            mk = e.get("markets") or {}
+            odd1 = mk.get("1")
+            odd2 = mk.get("2")
+            if odd1 is None and odd2 is None:
                 continue
-            fid = int((fx.get("fixture", {}) or {}).get("id") or 0)
+
+            try:
+                o1 = float(odd1) if odd1 is not None else None
+                o2 = float(odd2) if odd2 is not None else None
+            except Exception:
+                continue
+
+            # determina la favorita pre-match tra 1 e 2
+            if o1 is not None and (o2 is None or o1 <= o2):
+                fav_side, fav_pre = "home", o1
+                fav_name, other_name = e.get("home", "Home"), e.get("away", "Away")
+            else:
+                fav_side, fav_pre = "away", o2
+                fav_name, other_name = e.get("away", "Away"), e.get("home", "Home")
+
+            if fav_pre is None or fav_pre > pre_max:
+                continue
+
+            fid = int(e.get("fixture_id") or 0)
             if not fid:
                 continue
-            try:
-                odds_resp = self.api.odds_by_fixture_bet365(fid)
-                mw = _parse_match_winner_from_odds(odds_resp)
-            except Exception:
-                mw = {}
-            if not mw:
-                continue
-
-            odd1 = mw.get("1"); odd2 = mw.get("2")
-            fav_side = None; fav_pre = None
-            if odd1 and (not odd2 or odd1 <= odd2):
-                fav_side, fav_pre = "home", odd1
-            elif odd2:
-                fav_side, fav_pre = "away", odd2
-            if (fav_pre is None) or (float(fav_pre) > PRE_FAV_MAX):
-                continue
-
-            tms = fx.get("teams", {}) or {}
-            fav_name = (tms.get(fav_side, {}) or {}).get("name") or (fx.get("fixture", {}).get("teams", {}) or {}).get(fav_side, {}).get("name") or fav_side
-            other_side = "away" if fav_side == "home" else "home"
-            other_name = (tms.get(other_side, {}) or {}).get("name") or (fx.get("fixture", {}).get("teams", {}) or {}).get(other_side, {}).get("name") or other_side
 
             self.watch[fid] = {
                 "fav_side": fav_side,
                 "fav_name": fav_name,
                 "other_name": other_name,
                 "pre_odd": float(fav_pre),
-                "league": f"{lg.get('country','')} — {lg.get('name','')}"
+                "league": f"{e.get('league_country','')} — {e.get('league_name','')}"
             }
             count += 1
 
-        _safe_send(self.tg, int(self.cfg.ADMIN_ID), f"🔎 LiveAlerts: watchlist caricata ({count} favorite ≤ {PRE_FAV_MAX}).")
+        _safe_send(self.tg, int(self.cfg.ADMIN_ID), f"🔎 LiveAlerts: watchlist caricata ({count} favorite ≤ {pre_max}).")
 
     def _fixture_losing_info(self, fx: Dict[str, Any], fav_side: str) -> Tuple[bool, int]:
         try:
