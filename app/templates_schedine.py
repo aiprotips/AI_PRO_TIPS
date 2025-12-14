@@ -93,7 +93,7 @@ def render_celebration_multipla(selections: list, total_odds: float, link: str) 
     )
 
 def render_quasi_vincente(missed_leg: str) -> str:
-    titles = ["PER UN SOFFIO", "QUASI LEGGENDA", "SFUMATA SUL PIÙ BELLO", "CI È MANCATO UN NULLA"]
+    titles = ["PER UN SOFFIO", "SFUMATA SUL PIÙ BELLO", "CI È MANCATO UN NULLA"]
     motivs = [
         "Non preoccupatevi, la prossima volta sarà nostra. 💪🔥",
         "Stessa fame, testa fredda, si riparte subito. 🚀",
