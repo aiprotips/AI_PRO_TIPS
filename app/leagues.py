@@ -37,42 +37,9 @@ _ALIAS = {
     "ligue2": "ligue 2",
     "coupe de france": "coupe de france",
 
-    # Portugal
-    "primeira liga": "primeira liga",
-    "liga portugal": "primeira liga",
-    "taca de portugal": "taca de portugal",
-    "taça de portugal": "taca de portugal",
-
     # Netherlands
     "eredivisie": "eredivisie",
     "knvb beker": "knvb beker",
-
-    # Belgium
-    "jupiler pro league": "jupiler pro league",
-    "pro league": "jupiler pro league",
-
-    # Austria
-    "austria bundesliga": "austria bundesliga",
-    "bundesliga": "bundesliga",  # disambiguato via country
-
-    # Denmark
-    "superliga": "superliga",
-    "superligaen": "superliga",
-
-    # Romania
-    "liga 1": "liga 1",
-    "liga i": "liga 1",
-
-    # Scotland
-    "premiership": "premiership",
-    "scottish premiership": "premiership",
-
-    # Switzerland
-    "super league": "super league",
-
-    # Turkey
-    "super lig": "super lig",
-    "süper lig": "super lig",
 
     # UEFA / International
     "uefa champions league": "uefa champions league",
@@ -119,34 +86,9 @@ _ALLOWED = set([
     ("france", "ligue 2"),
     ("france", "coupe de france"),
 
-    # Portugal
-    ("portugal", "primeira liga"),
-    ("portugal", "taca de portugal"),
-
     # Netherlands
     ("netherlands", "eredivisie"),
     ("netherlands", "knvb beker"),
-
-    # Belgium
-    ("belgium", "jupiler pro league"),
-
-    # Austria
-    ("austria", "austria bundesliga"),
-
-    # Denmark
-    ("denmark", "superliga"),
-
-    # Romania
-    ("romania", "liga 1"),
-
-    # Scotland
-    ("scotland", "premiership"),
-
-    # Switzerland
-    ("switzerland", "super league"),
-
-    # Turkey
-    ("turkey", "super lig"),
 
     # UEFA / International / World / CONMEBOL (spesso country='World' in API-Football)
     (None, "uefa champions league"),
