@@ -85,6 +85,18 @@ class APIFootball:
         return any(tok in name for tok in _EXCLUDE_PARTIAL)
 
     @staticmethod
+    def _bad_team_name(name: str) -> bool:
+        """True se il nome squadra è mancante o un placeholder (Home/Away).
+
+        NOTE: alcuni endpoint quote (odds) possono restituire letteralmente "Home"/"Away".
+        In quel caso forziamo il fetch via /fixtures per ottenere i nomi reali.
+        """
+        if not name:
+            return True
+        s = str(name).strip().lower()
+        return s in ("home", "away", "home team", "away team")
+
+    @staticmethod
     def _parse_market_block(bets: List[Dict]) -> Dict[str, float]:
         out: Dict[str, float] = {}
         for bet in bets:
@@ -134,19 +146,26 @@ class APIFootball:
             fid = int(fixture.get("id") or 0)
             kickoff_iso = fixture.get("date") or ""
 
+            if not fid:
+                continue
+
             teams = e.get("teams") or (fixture.get("teams") or {})
             home = ((teams.get("home") or {}).get("name"))
             away = ((teams.get("away") or {}).get("name"))
-            if not home or not away:
+            if self._bad_team_name(home) or self._bad_team_name(away):
                 try:
                     fx = self._get("/fixtures", {"id": fid}).get("response", []) or []
                     if fx:
                         fteams = (fx[0].get("teams") or {})
-                        home = home or ((fteams.get("home") or {}).get("name"))
-                        away = away or ((fteams.get("away") or {}).get("name"))
+                        home = ((fteams.get("home") or {}).get("name")) or home
+                        away = ((fteams.get("away") or {}).get("name")) or away
                 except Exception:
                     pass
-            home = home or "Home"; away = away or "Away"
+
+            # Se non riusciamo a recuperare i nomi reali, scartiamo la entry:
+            # meglio non pubblicare un messaggio incompleto (Home/Away).
+            if self._bad_team_name(home) or self._bad_team_name(away):
+                continue
 
             bookmakers = e.get("bookmakers", []) or []
             if not bookmakers: continue
@@ -190,8 +209,21 @@ class APIFootball:
             if not fid: continue
 
             teams = fx.get("teams") or (fixture.get("teams") or {})
-            home = ((teams.get("home") or {}).get("name")) or "Home"
-            away = ((teams.get("away") or {}).get("name")) or "Away"
+            home = ((teams.get("home") or {}).get("name"))
+            away = ((teams.get("away") or {}).get("name"))
+
+            if self._bad_team_name(home) or self._bad_team_name(away):
+                try:
+                    fx_det = self._get("/fixtures", {"id": fid}).get("response", []) or []
+                    if fx_det:
+                        fteams = (fx_det[0].get("teams") or {})
+                        home = ((fteams.get("home") or {}).get("name")) or home
+                        away = ((fteams.get("away") or {}).get("name")) or away
+                except Exception:
+                    pass
+
+            if self._bad_team_name(home) or self._bad_team_name(away):
+                continue
             kickoff_iso = fixture.get("date") or ""
 
             oresp = self.odds_by_fixture_bet365(fid)
