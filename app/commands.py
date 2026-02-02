@@ -11,6 +11,7 @@ from .leagues import allowed_league, label_league
 
 from .value_builder import plan_day, render_plan_blocks
 from .repo_sched import list_today, cancel_by_short_id, cancel_all_today
+from .repo_bets import report_summary
 from .live_alerts import LiveAlerts
 
 def _to_local_hhmm(iso: str, tz: str) -> str:
@@ -160,6 +161,41 @@ class CommandsLoop:
             self._send(chat_id, "Comandi: /quote [today|tomorrow|all], /plan [today|tomorrow], /plan_publish [today|tomorrow], /preview_today, /cancel ID, /cancel_all, /regen, /rebuild_watchlist, /watchlist"); return
         if low.startswith("/ping"):
             self._send(chat_id, "pong ✅"); return
+
+        if low.startswith("/report"):
+            # Report sempre inviato SOLO in privato all'admin (nessun leak su gruppi/canali)
+            dest_chat = int(self.cfg.ADMIN_ID)
+            try:
+                rep = report_summary()
+                total = int(rep.get("total") or 0)
+                won = int(rep.get("won") or 0)
+                lost = int(rep.get("lost") or 0)
+                pending = int(rep.get("pending") or 0)
+                cancelled = int(rep.get("cancelled") or 0)
+                sum_odds_won = rep.get("sum_odds_won") or 0
+                try:
+                    sum_odds_won = float(sum_odds_won)
+                except Exception:
+                    sum_odds_won = 0.0
+
+                lines = [
+                    "<b>📊 Report</b>",
+                    f"Giocate condivise: <b>{total}</b>",
+                    f"Vinte: <b>{won}</b>",
+                    f"Perse: <b>{lost}</b>",
+                ]
+                if pending:
+                    lines.append(f"In attesa: <b>{pending}</b>")
+                if cancelled:
+                    lines.append(f"Annullate: <b>{cancelled}</b>")
+                lines.append(f"Totale quota delle vittorie: <b>{sum_odds_won:.2f}</b>")
+                self._send(dest_chat, "\n".join(lines))
+            except Exception as e:
+                try:
+                    self._send(dest_chat, f"❌ Errore report: {e}")
+                except Exception:
+                    pass
+            return
 
         if low.startswith("/quote"):
             parts = text.split()
