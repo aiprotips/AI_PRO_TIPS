@@ -143,3 +143,44 @@ def recalc_betslip_status(betslip_id: int) -> str:
             return "WON"
         cur.execute("UPDATE betslips SET status='OPEN' WHERE id=%s", (betslip_id,))
         return "OPEN"
+
+def report_summary() -> Dict[str, Any]:
+    """Riepilogo betslips PUBBLICATE (solo schedine inviate sul canale).
+
+    Una betslip viene considerata "pubblicata" se esiste un record in scheduled_messages
+    con status='SENT' il cui short_id coincide con la parte finale del campo betslips.code
+    (es: 20250202-12345 -> short_id=12345).
+    """
+    sql = """
+    SELECT
+      COUNT(*) AS total,
+      SUM(b.status='WON') AS won,
+      SUM(b.status='LOST') AS lost,
+      SUM(b.status IN ('OPEN','SENT')) AS pending,
+      SUM(b.status='CANCELLED') AS cancelled,
+      SUM(CASE WHEN b.status='WON' THEN b.total_odds ELSE 0 END) AS sum_odds_won
+    FROM betslips b
+    JOIN scheduled_messages sm
+      ON sm.short_id = SUBSTRING_INDEX(b.code, '-', -1)
+    WHERE sm.status='SENT'
+    """
+    with get_conn() as c, c.cursor() as cur:
+        cur.execute(sql); row = cur.fetchone() or {}
+        total = int(row.get("total") or 0)
+        won = int(row.get("won") or 0)
+        lost = int(row.get("lost") or 0)
+        pending = int(row.get("pending") or 0)
+        cancelled = int(row.get("cancelled") or 0)
+        sum_odds_won = row.get("sum_odds_won") or 0
+        try:
+            sum_odds_won = float(sum_odds_won)
+        except Exception:
+            sum_odds_won = 0.0
+        return {
+            "total": total,
+            "won": won,
+            "lost": lost,
+            "pending": pending,
+            "cancelled": cancelled,
+            "sum_odds_won": sum_odds_won,
+        }
